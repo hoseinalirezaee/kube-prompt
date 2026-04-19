@@ -156,15 +156,16 @@ func (c *Completer) completeOptionArguments(ctx context.Context, d prompt.Docume
 	switch cmd {
 	case "get", "describe", "create", "delete", "replace", "patch",
 		"edit", "apply", "expose", "rolling-update", "rollout",
-		"label", "annotate", "scale", "convert", "autoscale", "top":
-		if option == "-f" || option == "--filename" {
+		"label", "annotate", "scale", "convert", "autoscale", "top",
+		"auth", "debug", "diff", "wait":
+		if option == "-f" || option == "--filename" || option == "-k" || option == "--kustomize" {
 			return yamlFileCompleter.Complete(d), true
 		}
 	}
 
 	// container
 	switch cmd {
-	case "exec", "logs", "run", "attach", "port-forward", "cp":
+	case "exec", "logs", "run", "attach", "port-forward", "cp", "debug":
 		if option == "-c" || option == "--container" {
 			cmdArgs := getCommandArgs(d)
 			var suggestions []prompt.Suggest
@@ -218,6 +219,7 @@ func excludeOptions(args []string) ([]string, bool) {
 
 		for _, s := range []string{
 			"-f", "--filename",
+			"-k", "--kustomize",
 			"-n", "--namespace",
 			"-s", "--server",
 			"--kubeconfig",

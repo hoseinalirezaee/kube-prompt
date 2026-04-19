@@ -113,6 +113,9 @@ func optionCompleter(args []string, long bool) []prompt.Suggest {
 		suggests = optionHelp
 	}
 
+	if suggests == nil {
+		suggests = optionHelp
+	}
 	suggests = append(suggests, globalOptions...)
 	if long {
 		return prompt.FilterContains(
