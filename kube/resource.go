@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/c-bata/go-prompt"
-	"github.com/c-bata/kube-prompt/internal/debug"
+	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -69,7 +69,7 @@ var (
 	componentStatusList atomic.Value
 )
 
-func fetchComponentStatusList(ctx context.Context, client *kubernetes.Clientset) {
+func fetchComponentStatusList(ctx context.Context, client kubernetes.Interface) {
 	key := "component_status"
 	if !shouldFetch(key) {
 		return
@@ -79,7 +79,7 @@ func fetchComponentStatusList(ctx context.Context, client *kubernetes.Clientset)
 	updateLastFetchedAt(key)
 }
 
-func getComponentStatusCompletions(ctx context.Context, client *kubernetes.Clientset) []prompt.Suggest {
+func getComponentStatusCompletions(ctx context.Context, client kubernetes.Interface) []prompt.Suggest {
 	go fetchComponentStatusList(ctx, client)
 	l, ok := componentStatusList.Load().(*corev1.ComponentStatusList)
 	if !ok || len(l.Items) == 0 {
@@ -100,7 +100,7 @@ var (
 	configMapsList atomic.Value
 )
 
-func fetchConfigMapList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchConfigMapList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "config_map_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -110,7 +110,7 @@ func fetchConfigMapList(ctx context.Context, client *kubernetes.Clientset, names
 	configMapsList.Store(l)
 }
 
-func getConfigMapSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getConfigMapSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchConfigMapList(ctx, client, namespace)
 	l, ok := configMapsList.Load().(*corev1.ConfigMapList)
 	if !ok || len(l.Items) == 0 {
@@ -163,7 +163,7 @@ var (
 	podList *sync.Map
 )
 
-func fetchPods(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchPods(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "pod_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -174,7 +174,7 @@ func fetchPods(ctx context.Context, client *kubernetes.Clientset, namespace stri
 	podList.Store(namespace, l)
 }
 
-func getPodSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getPodSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchPods(ctx, client, namespace)
 	x, ok := podList.Load(namespace)
 	if !ok {
@@ -243,7 +243,7 @@ func getPortsFromPodName(namespace string, podName string) []prompt.Suggest {
 	return suggests
 }
 
-func getContainerNamesFromCachedPods(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getContainerNamesFromCachedPods(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchPods(ctx, client, namespace)
 
 	x, ok := podList.Load(namespace)
@@ -271,7 +271,7 @@ func getContainerNamesFromCachedPods(ctx context.Context, client *kubernetes.Cli
 	return s
 }
 
-func getContainerName(ctx context.Context, client *kubernetes.Clientset, namespace string, podName string) []prompt.Suggest {
+func getContainerName(ctx context.Context, client kubernetes.Interface, namespace string, podName string) []prompt.Suggest {
 	go fetchPods(ctx, client, namespace)
 
 	pod, found := getPod(namespace, podName)
@@ -294,7 +294,7 @@ var (
 	daemonSetList *sync.Map
 )
 
-func fetchDaemonSetList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchDaemonSetList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "daemon_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -306,13 +306,13 @@ func fetchDaemonSetList(ctx context.Context, client *kubernetes.Clientset, names
 	return
 }
 
-func getDaemonSetSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getDaemonSetSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchDaemonSetList(ctx, client, namespace)
 	x, ok := daemonSetList.Load(namespace)
 	if !ok {
 		return []prompt.Suggest{}
 	}
-	l, ok := x.(appsv1.DaemonSetList)
+	l, ok := x.(*appsv1.DaemonSetList)
 	if !ok || len(l.Items) == 0 {
 		return []prompt.Suggest{}
 	}
@@ -331,7 +331,7 @@ var (
 	deploymentList *sync.Map
 )
 
-func fetchDeployments(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchDeployments(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "deployment_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -343,7 +343,7 @@ func fetchDeployments(ctx context.Context, client *kubernetes.Clientset, namespa
 	return
 }
 
-func getDeploymentSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getDeploymentSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchDeployments(ctx, client, namespace)
 	x, ok := deploymentList.Load(namespace)
 	if !ok {
@@ -368,7 +368,7 @@ var (
 	endpointList *sync.Map
 )
 
-func fetchEndpoints(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchEndpoints(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "endpoint_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -376,11 +376,11 @@ func fetchEndpoints(ctx context.Context, client *kubernetes.Clientset, namespace
 	updateLastFetchedAt(key)
 
 	l, _ := client.CoreV1().Endpoints(namespace).List(ctx, metav1.ListOptions{})
-	endpointList.Store(key, l)
+	endpointList.Store(namespace, l)
 	return
 }
 
-func getEndpointsSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getEndpointsSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchEndpoints(ctx, client, namespace)
 	x, ok := endpointList.Load(namespace)
 	if !ok {
@@ -405,7 +405,7 @@ var (
 	eventList *sync.Map
 )
 
-func fetchEvents(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchEvents(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "event_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -417,7 +417,7 @@ func fetchEvents(ctx context.Context, client *kubernetes.Clientset, namespace st
 	return
 }
 
-func getEventsSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getEventsSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchEvents(ctx, client, namespace)
 	x, ok := eventList.Load(namespace)
 	if !ok {
@@ -442,7 +442,7 @@ var (
 	nodeList atomic.Value
 )
 
-func fetchNodeList(ctx context.Context, client *kubernetes.Clientset) {
+func fetchNodeList(ctx context.Context, client kubernetes.Interface) {
 	key := "node"
 	if !shouldFetch(key) {
 		return
@@ -454,7 +454,7 @@ func fetchNodeList(ctx context.Context, client *kubernetes.Clientset) {
 	return
 }
 
-func getNodeSuggestions(ctx context.Context, client *kubernetes.Clientset) []prompt.Suggest {
+func getNodeSuggestions(ctx context.Context, client kubernetes.Interface) []prompt.Suggest {
 	go fetchNodeList(ctx, client)
 	l, ok := nodeList.Load().(*corev1.NodeList)
 	if !ok || len(l.Items) == 0 {
@@ -475,7 +475,7 @@ var (
 	secretList *sync.Map
 )
 
-func fetchSecretList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchSecretList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "secret_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -487,7 +487,7 @@ func fetchSecretList(ctx context.Context, client *kubernetes.Clientset, namespac
 	return
 }
 
-func getSecretSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getSecretSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchSecretList(ctx, client, namespace)
 	x, ok := secretList.Load(namespace)
 	if !ok {
@@ -512,25 +512,25 @@ var (
 	ingressList *sync.Map
 )
 
-func fetchIngresses(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchIngresses(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "ingress_" + namespace
 	if !shouldFetch(key) {
 		return
 	}
 	updateLastFetchedAt(key)
 
-	l, _ := client.ExtensionsV1beta1().Ingresses(namespace).List(ctx, metav1.ListOptions{})
+	l, _ := client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{})
 	ingressList.Store(namespace, l)
 }
 
-func getIngressSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getIngressSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchIngresses(ctx, client, namespace)
 
 	x, ok := ingressList.Load(namespace)
 	if !ok {
 		return []prompt.Suggest{}
 	}
-	l, ok := x.(*extensionsv1beta1.IngressList)
+	l, ok := x.(*networkingv1.IngressList)
 	if !ok {
 		debug.Log("must not reach here")
 		return []prompt.Suggest{}
@@ -553,7 +553,7 @@ var (
 	limitRangeList *sync.Map
 )
 
-func fetchLimitRangeList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchLimitRangeList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "limit_range_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -565,13 +565,13 @@ func fetchLimitRangeList(ctx context.Context, client *kubernetes.Clientset, name
 	return
 }
 
-func getLimitRangeSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getLimitRangeSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchLimitRangeList(ctx, client, namespace)
 	x, ok := limitRangeList.Load(namespace)
 	if !ok {
 		return []prompt.Suggest{}
 	}
-	l, ok := x.(*corev1.NamespaceList)
+	l, ok := x.(*corev1.LimitRangeList)
 	if !ok || len(l.Items) == 0 {
 		return []prompt.Suggest{}
 	}
@@ -605,7 +605,7 @@ var (
 	persistentVolumeClaimsList *sync.Map
 )
 
-func fetchPersistentVolumeClaimsList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchPersistentVolumeClaimsList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "persistent_volume_claims" + namespace
 	if !shouldFetch(key) {
 		return
@@ -617,7 +617,7 @@ func fetchPersistentVolumeClaimsList(ctx context.Context, client *kubernetes.Cli
 	return
 }
 
-func getPersistentVolumeClaimSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getPersistentVolumeClaimSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchPersistentVolumeClaimsList(ctx, client, namespace)
 	x, ok := persistentVolumeClaimsList.Load(namespace)
 	if !ok {
@@ -642,7 +642,7 @@ var (
 	persistentVolumesList atomic.Value
 )
 
-func fetchPersistentVolumeList(ctx context.Context, client *kubernetes.Clientset) {
+func fetchPersistentVolumeList(ctx context.Context, client kubernetes.Interface) {
 	key := "persistent_volume"
 	if !shouldFetch(key) {
 		return
@@ -654,7 +654,7 @@ func fetchPersistentVolumeList(ctx context.Context, client *kubernetes.Clientset
 	return
 }
 
-func getPersistentVolumeSuggestions(ctx context.Context, client *kubernetes.Clientset) []prompt.Suggest {
+func getPersistentVolumeSuggestions(ctx context.Context, client kubernetes.Interface) []prompt.Suggest {
 	go fetchPersistentVolumeList(ctx, client)
 	l, ok := persistentVolumesList.Load().(*corev1.PersistentVolumeList)
 	if !ok || len(l.Items) == 0 {
@@ -675,7 +675,7 @@ var (
 	podTemplateList *sync.Map
 )
 
-func fetchPodTemplateList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchPodTemplateList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "pod_template_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -687,7 +687,7 @@ func fetchPodTemplateList(ctx context.Context, client *kubernetes.Clientset, nam
 	return
 }
 
-func getPodTemplateSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getPodTemplateSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchPodTemplateList(ctx, client, namespace)
 	x, ok := podTemplateList.Load(namespace)
 	if !ok {
@@ -712,25 +712,25 @@ var (
 	replicaSetList *sync.Map
 )
 
-func fetchReplicaSetList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchReplicaSetList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "replica_set_" + namespace
 	if !shouldFetch(key) {
 		return
 	}
 	updateLastFetchedAt(key)
 
-	l, _ := client.AppsV1beta2().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
+	l, _ := client.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
 	replicaSetList.Store(namespace, l)
 	return
 }
 
-func getReplicaSetSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getReplicaSetSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchReplicaSetList(ctx, client, namespace)
 	x, ok := replicaSetList.Load(namespace)
 	if !ok {
 		return []prompt.Suggest{}
 	}
-	l, ok := x.(appsv1.ReplicaSetList)
+	l, ok := x.(*appsv1.ReplicaSetList)
 	if !ok || len(l.Items) == 0 {
 		return []prompt.Suggest{}
 	}
@@ -749,7 +749,7 @@ var (
 	replicationControllerList *sync.Map
 )
 
-func fetchReplicationControllerList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchReplicationControllerList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "replication_controller" + namespace
 	if !shouldFetch(key) {
 		return
@@ -761,7 +761,7 @@ func fetchReplicationControllerList(ctx context.Context, client *kubernetes.Clie
 	return
 }
 
-func getReplicationControllerSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getReplicationControllerSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchReplicationControllerList(ctx, client, namespace)
 	x, ok := replicationControllerList.Load(namespace)
 	if !ok {
@@ -786,7 +786,7 @@ var (
 	resourceQuotaList *sync.Map
 )
 
-func fetchResourceQuotaList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchResourceQuotaList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "resource_quota" + namespace
 	if !shouldFetch(key) {
 		return
@@ -798,7 +798,7 @@ func fetchResourceQuotaList(ctx context.Context, client *kubernetes.Clientset, n
 	return
 }
 
-func getResourceQuotasSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getResourceQuotasSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchResourceQuotaList(ctx, client, namespace)
 	x, ok := resourceQuotaList.Load(namespace)
 	if !ok {
@@ -823,7 +823,7 @@ var (
 	serviceAccountList *sync.Map
 )
 
-func fetchServiceAccountList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchServiceAccountList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "service_account_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -835,7 +835,7 @@ func fetchServiceAccountList(ctx context.Context, client *kubernetes.Clientset, 
 	return
 }
 
-func getServiceAccountSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getServiceAccountSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchServiceAccountList(ctx, client, namespace)
 	x, ok := serviceAccountList.Load(namespace)
 	if !ok {
@@ -860,7 +860,7 @@ var (
 	serviceList *sync.Map
 )
 
-func fetchServiceList(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchServiceList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "service_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -872,7 +872,7 @@ func fetchServiceList(ctx context.Context, client *kubernetes.Clientset, namespa
 	return
 }
 
-func getServiceSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getServiceSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchServiceList(ctx, client, namespace)
 	x, ok := serviceList.Load(namespace)
 	if !ok {
@@ -897,7 +897,7 @@ var (
 	jobList *sync.Map
 )
 
-func fetchJobs(ctx context.Context, client *kubernetes.Clientset, namespace string) {
+func fetchJobs(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "job_" + namespace
 	if !shouldFetch(key) {
 		return
@@ -908,7 +908,7 @@ func fetchJobs(ctx context.Context, client *kubernetes.Clientset, namespace stri
 	jobList.Store(namespace, l)
 }
 
-func getJobSuggestions(ctx context.Context, client *kubernetes.Clientset, namespace string) []prompt.Suggest {
+func getJobSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
 	go fetchJobs(ctx, client, namespace)
 	x, ok := jobList.Load(namespace)
 	if !ok {

@@ -1,9 +1,13 @@
 # kube-prompt
 
 ![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)
-![Go Report Card](https://goreportcard.com/badge/github.com/c-bata/kube-prompt)
+![Go Report Card](https://goreportcard.com/badge/github.com/hoseinalirezaee/kube-prompt)
 
 An interactive kubernetes client featuring auto-complete using [go-prompt](https://github.com/c-bata/go-prompt).
+
+This repository is a maintained divergent fork of the original
+[c-bata/kube-prompt](https://github.com/c-bata/kube-prompt). The original
+project, author attribution, and MIT license are preserved.
 
 ![demo](https://github.com/c-bata/assets/raw/master/kube-prompt/kube-prompt.gif)
 
@@ -23,14 +27,26 @@ web-1144924021-pqmfq        1/1     Running     4       25d
 
 #### Downloading standalone binary
 
-Binaries are available from [github release](https://github.com/c-bata/kube-prompt/releases).
+Binaries are available from [GitHub Releases](https://github.com/hoseinalirezaee/kube-prompt/releases).
 
 <details>
 <summary>macOS (darwin) - amd64</summary>
 
 ```
-wget https://github.com/c-bata/kube-prompt/releases/download/v1.0.11/kube-prompt_v1.0.11_darwin_amd64.zip
-unzip kube-prompt_v1.0.11_darwin_amd64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.0.0/kube-prompt_v2.0.0_darwin_amd64.zip
+unzip kube-prompt_v2.0.0_darwin_amd64.zip
+chmod +x kube-prompt
+sudo mv ./kube-prompt /usr/local/bin/kube-prompt
+```
+
+</details>
+
+<details>
+<summary>macOS (darwin) - arm64</summary>
+
+```
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.0.0/kube-prompt_v2.0.0_darwin_arm64.zip
+unzip kube-prompt_v2.0.0_darwin_arm64.zip
 chmod +x kube-prompt
 sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 ```
@@ -41,50 +57,51 @@ sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 <summary>Linux - amd64</summary>
 
 ```
-wget https://github.com/c-bata/kube-prompt/releases/download/v1.0.11/kube-prompt_v1.0.11_linux_amd64.zip
-unzip kube-prompt_v1.0.11_linux_amd64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.0.0/kube-prompt_v2.0.0_linux_amd64.zip
+unzip kube-prompt_v2.0.0_linux_amd64.zip
 chmod +x kube-prompt
 sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 ```
 
 </details>
 
-
-<details>
-<summary>Linux - i386</summary>
-
-```
-wget https://github.com/c-bata/kube-prompt/releases/download/v1.0.11/kube-prompt_v1.0.11_linux_386.zip
-unzip kube-prompt_v1.0.11_linux_386.zip
-chmod +x kube-prompt
-sudo mv ./kube-prompt /usr/local/bin/kube-prompt
-```
-
-</details>
 
 <details>
 <summary>Linux - arm64</summary>
 
 ```
-wget https://github.com/c-bata/kube-prompt/releases/download/v1.0.11/kube-prompt_v1.0.11_linux_arm64.zip
-unzip kube-prompt_v1.0.11_linux_arm64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.0.0/kube-prompt_v2.0.0_linux_arm64.zip
+unzip kube-prompt_v2.0.0_linux_arm64.zip
 chmod +x kube-prompt
 sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 ```
 
 </details>
 
-#### Using Homebrew (macOS)
+<details>
+<summary>Windows - amd64</summary>
 
-```console
-$ brew install c-bata/kube-prompt/kube-prompt
+```
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.0.0/kube-prompt_v2.0.0_windows_amd64.zip
+unzip kube-prompt_v2.0.0_windows_amd64.zip
 ```
 
-#### Arch Linux
+</details>
 
-An unofficial [AUR package](https://aur.archlinux.org/packages/kube-prompt) `kube-prompt`
-is available. Install instructions can be found on the [Arch 
-wiki](https://wiki.archlinux.org/index.php/Arch_User_Repository#Installing_packages).
+<details>
+<summary>Windows - arm64</summary>
+
+```
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.0.0/kube-prompt_v2.0.0_windows_arm64.zip
+unzip kube-prompt_v2.0.0_windows_arm64.zip
+```
+
+</details>
+
+#### Package managers
+
+This fork does not currently publish a Homebrew tap or distro package. Use the
+standalone binaries or build from source.
 
 #### Building from source
 
@@ -102,9 +119,9 @@ $ make cross
 
 * [kube-shell](https://github.com/cloudnativelabs/kube-shell): An integrated shell for working with the Kubernetes written in Python using [python-prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit).
 
-## Goal
+## Command coverage
 
-Hopefully support following commands enough to operate kubernetes.
+kube-prompt currently provides completion coverage for these kubectl commands:
 
 * [x] `get`            Display one or many resources
 * [x] `describe`       Show details of a specific resource or group of resources
@@ -141,11 +158,13 @@ Hopefully support following commands enough to operate kubernetes.
 
 ## Author
 
-Masashi Shibata
+Original project by Masashi Shibata.
 
 * Twitter: [@c\_bata\_](https://twitter.com/c_bata_/)
 * Github: [@c-bata](https://github.com/c-bata/)
 * Facebook: [Masashi Shibata](https://www.facebook.com/masashi.cbata)
+
+This fork is maintained by [@hoseinalirezaee](https://github.com/hoseinalirezaee).
 
 ## LICENSE
 

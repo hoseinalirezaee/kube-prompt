@@ -4,6 +4,9 @@ on:
     tags:
     - v*.*.*
 
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Build
@@ -17,20 +20,14 @@ jobs:
         check-latest: true
         go-version-file: go.mod
 
-    - name: Build
-      env:
-        GOPATH: /home/runner/work
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        export TAGNAME=$(jq --raw-output .ref "$GITHUB_EVENT_PATH" | sed -e "s/refs\/tags\///")
-        echo "========================================================="
-        echo "DEBUG:" $TAGNAME
-        echo "========================================================="
-        make cross
-        echo "========================================================="
-        echo "DEBUG: ls pkg/"
-        ls pkg/
-        echo "========================================================="
-        go install github.com/tcnksm/ghr@latest
-        $GOPATH/bin/ghr -n ${TAGNAME} -b "ʕ◔ϖ◔ʔ Release ${TAGNAME}" -draft ${TAGNAME} pkg/
+    - name: Build artifacts
+      run: make cross
 
+    - name: Publish release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create "$GITHUB_REF_NAME" pkg/* \
+          --verify-tag \
+          --title "$GITHUB_REF_NAME" \
+          --notes "Release $GITHUB_REF_NAME"

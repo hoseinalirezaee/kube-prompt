@@ -55,7 +55,7 @@ func NewCompleter(ctx context.Context) (*Completer, error) {
 type Completer struct {
 	namespace     string
 	namespaceList *corev1.NamespaceList
-	client        *kubernetes.Clientset
+	client        kubernetes.Interface
 }
 
 func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
