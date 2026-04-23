@@ -10,7 +10,17 @@ import (
 	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
 )
 
+func NewExecutor(kubeconfig string) func(string) {
+	return func(s string) {
+		execute(s, kubeconfig)
+	}
+}
+
 func Executor(s string) {
+	execute(s, "")
+}
+
+func execute(s, kubeconfig string) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return
@@ -20,17 +30,20 @@ func Executor(s string) {
 		return
 	}
 
-	cmd := exec.Command("/bin/sh", "-c", "kubectl "+s)
+	cmd := kubectlCommand(s, kubeconfig)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("Got error: %s\n", err.Error())
 	}
-	return
 }
 
 func ExecuteAndGetResult(s string) string {
+	return ExecuteAndGetResultWithKubeconfig(s, "")
+}
+
+func ExecuteAndGetResultWithKubeconfig(s, kubeconfig string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		debug.Log("you need to pass the something arguments")
@@ -38,7 +51,7 @@ func ExecuteAndGetResult(s string) string {
 	}
 
 	out := &bytes.Buffer{}
-	cmd := exec.Command("/bin/sh", "-c", "kubectl "+s)
+	cmd := kubectlCommand(s, kubeconfig)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = out
 	if err := cmd.Run(); err != nil {
@@ -47,4 +60,12 @@ func ExecuteAndGetResult(s string) string {
 	}
 	r := string(out.Bytes())
 	return r
+}
+
+func kubectlCommand(s, kubeconfig string) *exec.Cmd {
+	cmd := exec.Command("/bin/sh", "-c", "kubectl "+s)
+	if kubeconfig != "" {
+		cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
+	}
+	return cmd
 }

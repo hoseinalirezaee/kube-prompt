@@ -128,23 +128,27 @@ func getConfigMapSuggestions(ctx context.Context, client kubernetes.Interface, n
 /* Contexts */
 
 var (
-	contextList atomic.Value
+	contextList sync.Map
 )
 
-func fetchContextList() {
-	key := "context"
+func fetchContextList(kubeconfig string) {
+	key := "context:" + kubeconfig
 	if !shouldFetch(key) {
 		return
 	}
 	updateLastFetchedAt(key)
-	r := ExecuteAndGetResult("config get-contexts --no-headers -o name")
+	r := ExecuteAndGetResultWithKubeconfig("config get-contexts --no-headers -o name", kubeconfig)
 	r = strings.TrimRight(r, "\n")
-	contextList.Store(strings.Split(r, "\n"))
+	contextList.Store(kubeconfig, strings.Split(r, "\n"))
 }
 
-func getContextSuggestions() []prompt.Suggest {
-	go fetchContextList()
-	l, ok := contextList.Load().([]string)
+func getContextSuggestions(kubeconfig string) []prompt.Suggest {
+	go fetchContextList(kubeconfig)
+	v, ok := contextList.Load(kubeconfig)
+	if !ok {
+		return []prompt.Suggest{}
+	}
+	l, ok := v.([]string)
 	if !ok || len(l) == 0 {
 		return []prompt.Suggest{}
 	}

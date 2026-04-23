@@ -14,8 +14,11 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func NewCompleter(ctx context.Context) (*Completer, error) {
+func NewCompleter(ctx context.Context, kubeconfig string) (*Completer, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if kubeconfig != "" {
+		loadingRules.ExplicitPath = kubeconfig
+	}
 	loader := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		loadingRules,
 		&clientcmd.ConfigOverrides{},
@@ -49,6 +52,7 @@ func NewCompleter(ctx context.Context) (*Completer, error) {
 		namespace:     namespace,
 		namespaceList: namespaces,
 		client:        client,
+		kubeconfig:    kubeconfig,
 	}, nil
 }
 
@@ -56,6 +60,7 @@ type Completer struct {
 	namespace     string
 	namespaceList *corev1.NamespaceList
 	client        kubernetes.Interface
+	kubeconfig    string
 }
 
 func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {

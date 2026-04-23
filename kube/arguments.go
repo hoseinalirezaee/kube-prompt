@@ -311,7 +311,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 			third := args[2]
 			switch args[1] {
 			case "use-context":
-				return prompt.FilterContains(getContextSuggestions(), third, true)
+				return prompt.FilterContains(getContextSuggestions(c.kubeconfig), third, true)
 			}
 		}
 	case "cluster-info":
