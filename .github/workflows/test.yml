@@ -1,14 +1,14 @@
 name: test
 on:
-  workflow_dispatch:
   push:
     branches:
-    - "**"
+      - "**"
     tags:
-    - "**"
+      - "**"
   pull_request:
     branches:
-    - main
+      - main
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -16,32 +16,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out code
-      uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
-    - name: Running golangci-lint
-      uses: golangci/golangci-lint-action@v6
-      with:
-        version: v1.59.1
-        args: --no-config --disable-all --enable=goimports --enable=misspell ./...
+      - name: Running golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59.1
+          args: --no-config --disable-all --enable=goimports --enable=misspell ./...
 
   test:
     name: Test
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out code
-      uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
-    - name: Running go tests
-      run: make test
+      - name: Running go tests
+        run: make test
