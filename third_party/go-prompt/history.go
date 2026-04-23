@@ -20,7 +20,6 @@ func (h *History) Add(input string) {
 		h.histories = append(h.histories, input)
 	}
 	h.Clear()
-	h.selected = len(h.tmp) - 2
 }
 
 // Clear to clear the history.

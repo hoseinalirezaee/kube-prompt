@@ -25,7 +25,7 @@ func TestHistoryAdd(t *testing.T) {
 	expected := &History{
 		histories: []string{"echo 1"},
 		tmp:       []string{"echo 1", ""},
-		selected:  0,
+		selected:  1,
 	}
 	if !reflect.DeepEqual(h, expected) {
 		t.Errorf("Should be %v, but got %v", expected, h)
@@ -92,22 +92,6 @@ func TestHistoryOlder(t *testing.T) {
 	buf := NewBuffer()
 	buf.InsertText("echo 2", false, true)
 
-	// [1 time] Call Older function
-	buf1, changed := h.Older(buf)
-	if changed {
-		t.Error("Should be not changed history but changed.")
-	}
-	if buf1.Text() != "echo 2" {
-		t.Errorf("Should be %#v, but got %#v", "echo 2", buf1.Text())
-	}
-}
-
-func TestHistoryOlderSkipsJustExecutedCommand(t *testing.T) {
-	h := NewHistory()
-	h.Add("echo 1")
-	h.Add("echo 2")
-
-	buf := NewBuffer()
 	buf1, changed := h.Older(buf)
 	if !changed {
 		t.Error("Should be changed history but not changed.")
@@ -116,15 +100,42 @@ func TestHistoryOlderSkipsJustExecutedCommand(t *testing.T) {
 		t.Errorf("Should be %#v, but got %#v", "echo 1", buf1.Text())
 	}
 
-	// [2 times] Call Older function
-	buf = NewBuffer()
-	buf.InsertText("echo 1", false, true)
-	buf2, changed := h.Older(buf)
+	buf2, changed := h.Newer(buf1)
+	if !changed {
+		t.Error("Should be changed history but not changed.")
+	}
+	if buf2.Text() != "echo 2" {
+		t.Errorf("Should be %#v, but got %#v", "echo 2", buf2.Text())
+	}
+}
+
+func TestHistoryOlderReturnsLastExecutedCommand(t *testing.T) {
+	h := NewHistory()
+	h.Add("echo 1")
+	h.Add("echo 2")
+
+	buf1, changed := h.Older(NewBuffer())
+	if !changed {
+		t.Error("Should be changed history but not changed.")
+	}
+	if buf1.Text() != "echo 2" {
+		t.Errorf("Should be %#v, but got %#v", "echo 2", buf1.Text())
+	}
+
+	buf2, changed := h.Older(buf1)
+	if !changed {
+		t.Error("Should be changed history but not changed.")
+	}
+	if buf2.Text() != "echo 1" {
+		t.Errorf("Should be %#v, but got %#v", "echo 1", buf2.Text())
+	}
+
+	buf3, changed := h.Older(buf2)
 	if changed {
 		t.Error("Should be not changed history but changed.")
 	}
-	if !reflect.DeepEqual("echo 1", buf2.Text()) {
-		t.Errorf("Should be %#v, but got %#v", "echo 1", buf2.Text())
+	if buf3.Text() != "echo 1" {
+		t.Errorf("Should be %#v, but got %#v", "echo 1", buf3.Text())
 	}
 }
 
@@ -137,6 +148,14 @@ func TestHistoryOlderSkipsConsecutiveDuplicateCommands(t *testing.T) {
 
 	buf := NewBuffer()
 	got, changed := h.Older(buf)
+	if !changed {
+		t.Error("Should be changed history but not changed.")
+	}
+	if got.Text() != "get pod b" {
+		t.Errorf("Should be %#v, but got %#v", "get pod b", got.Text())
+	}
+
+	got, changed = h.Older(got)
 	if !changed {
 		t.Error("Should be changed history but not changed.")
 	}
@@ -175,8 +194,8 @@ func TestHistoryNewerReturnsToCurrentPromptAfterSkippedDuplicate(t *testing.T) {
 	if !changed {
 		t.Fatal("Should be changed history but not changed.")
 	}
-	if buf.Text() != "get pod a" {
-		t.Fatalf("Should be %#v, but got %#v", "get pod a", buf.Text())
+	if buf.Text() != "get pod b" {
+		t.Fatalf("Should be %#v, but got %#v", "get pod b", buf.Text())
 	}
 
 	buf, changed = h.Newer(buf)
