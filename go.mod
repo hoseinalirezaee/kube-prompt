@@ -2,6 +2,7 @@ module github.com/hoseinalirezaee/kube-prompt
 
 require (
 	github.com/c-bata/go-prompt v0.0.0-00010101000000-000000000000
+	golang.org/x/term v0.18.0
 	k8s.io/api v0.30.3
 	k8s.io/apimachinery v0.30.3
 	k8s.io/client-go v0.30.3
@@ -39,7 +40,6 @@ require (
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.10.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
-	golang.org/x/term v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect

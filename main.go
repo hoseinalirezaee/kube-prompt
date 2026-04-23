@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -26,8 +27,9 @@ func main() {
 }
 
 type cliConfig struct {
-	kubeconfig string
-	version    bool
+	kubeconfig       string
+	kubeconfigStatus string
+	version          bool
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -38,7 +40,26 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if cfg == nil {
 		return 0
 	}
-	return runPrompt(context.TODO(), *cfg, stdout, stderr)
+	resolved, err := requireKubeconfig(*cfg, os.Getenv)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	return runPrompt(context.TODO(), resolved, stdout, stderr)
+}
+
+var errKubeconfigRequired = errors.New("kubeconfig is required: set KUBECONFIG or pass --kubeconfig PATH")
+
+func requireKubeconfig(cfg cliConfig, getenv func(string) string) (cliConfig, error) {
+	if cfg.kubeconfig != "" {
+		cfg.kubeconfigStatus = cfg.kubeconfig
+		return cfg, nil
+	}
+	if envKubeconfig := getenv("KUBECONFIG"); envKubeconfig != "" {
+		cfg.kubeconfigStatus = envKubeconfig
+		return cfg, nil
+	}
+	return cfg, errKubeconfigRequired
 }
 
 func parseCLI(args []string, stdout, stderr io.Writer) (*cliConfig, bool) {
@@ -115,17 +136,34 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 	}
 
 	defer debug.Teardown()
+	statusWriter := newStatusLineWriter(prompt.NewStdoutWriter(), kubeconfigStatusLine(cfg))
+	statusWriter.Attach()
+	defer statusWriter.Close()
+
 	fmt.Fprintln(stdout, versionString())
 	fmt.Fprintln(stdout, "Please use `exit` or `Ctrl-D` to exit this program.")
 	defer fmt.Fprintln(stdout, "Bye!")
-	p := prompt.New(
-		kube.NewExecutor(cfg.kubeconfig),
-		c.Complete,
+
+	promptOptions := []prompt.Option{
+		prompt.OptionWriter(statusWriter),
 		prompt.OptionTitle("kube-prompt: interactive kubernetes client"),
 		prompt.OptionPrefix(">>> "),
 		prompt.OptionInputTextColor(prompt.Yellow),
 		prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
+	}
+	if statusWriter.attached {
+		promptOptions = append(promptOptions, prompt.OptionParser(newStatusLineParser(prompt.NewStandardInputParser())))
+	}
+
+	p := prompt.New(
+		kube.NewExecutor(cfg.kubeconfig),
+		c.Complete,
+		promptOptions...,
 	)
 	p.Run()
 	return 0
+}
+
+func kubeconfigStatusLine(cfg cliConfig) string {
+	return " kube-prompt | kubeconfig: " + cfg.kubeconfigStatus + " "
 }
