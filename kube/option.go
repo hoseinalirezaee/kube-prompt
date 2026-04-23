@@ -3,7 +3,7 @@ package kube
 import (
 	"strings"
 
-	prompt "github.com/c-bata/go-prompt"
+	prompt "github.com/hoseinalirezaee/kube-prompt/prompt"
 )
 
 func optionCompleter(args []string, long bool) []prompt.Suggest {

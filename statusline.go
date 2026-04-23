@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/c-bata/go-prompt"
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
 	"golang.org/x/term"
 )
 

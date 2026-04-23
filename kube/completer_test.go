@@ -3,8 +3,8 @@ package kube
 import (
 	"testing"
 
-	"github.com/c-bata/go-prompt"
-	"github.com/c-bata/go-prompt/completer"
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
+	"github.com/hoseinalirezaee/kube-prompt/prompt/completer"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

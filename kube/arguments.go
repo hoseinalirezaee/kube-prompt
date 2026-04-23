@@ -3,7 +3,7 @@ package kube
 import (
 	"context"
 
-	"github.com/c-bata/go-prompt"
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
 )
 
 var commands = []prompt.Suggest{

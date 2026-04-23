@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	prompt "github.com/c-bata/go-prompt"
+	prompt "github.com/hoseinalirezaee/kube-prompt/prompt"
 )
 
 func GetOptionsFromHelpText(help string) (options string, err error) {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/c-bata/go-prompt"
 	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"

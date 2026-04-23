@@ -3,7 +3,7 @@ package kube
 import (
 	"testing"
 
-	"github.com/c-bata/go-prompt"
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
 )
 
 func TestGetPreviousOption(t *testing.T) {

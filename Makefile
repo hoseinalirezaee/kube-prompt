@@ -16,7 +16,8 @@ fmt: ## Formatting source codes.
 
 .PHONY: lint
 lint: ## Run golint and go vet.
-	@$(GOCILINT) run --no-config --disable-all --enable=goimports --enable=misspell ./...
+	@$(GOCILINT) fmt --no-config --enable=goimports --diff
+	@$(GOCILINT) run --no-config --enable-only=misspell ./...
 
 .PHONY: test
 test:  ## Run the tests.

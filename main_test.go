@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c-bata/go-prompt"
 	"github.com/hoseinalirezaee/kube-prompt/kube"
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
 )
 
 func TestRunHelp(t *testing.T) {

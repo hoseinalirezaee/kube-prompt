@@ -8,10 +8,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/c-bata/go-prompt"
-	"github.com/c-bata/go-prompt/completer"
 	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
 	"github.com/hoseinalirezaee/kube-prompt/kube"
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
+	"github.com/hoseinalirezaee/kube-prompt/prompt/completer"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
