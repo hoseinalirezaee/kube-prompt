@@ -1,33 +1,86 @@
 name: release
+
 on:
-  push:
-    tags:
-    - v*.*.*
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example v2.1.0"
+        required: true
+        type: string
+      release_notes:
+        description: "Optional release notes body"
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: Build
+    name: Build and publish
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - uses: actions/setup-go@v5
-      id: go
-      with:
-        check-latest: true
-        go-version-file: go.mod
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          check-latest: true
+          go-version-file: go.mod
 
-    - name: Build artifacts
-      run: make cross
+      - name: Validate release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
 
-    - name: Publish release
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        gh release create "$GITHUB_REF_NAME" pkg/* \
-          --verify-tag \
-          --title "$GITHUB_REF_NAME" \
-          --notes "Release $GITHUB_REF_NAME"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version must match vMAJOR.MINOR.PATCH, got: $VERSION" >&2
+            exit 1
+          fi
+
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "tag already exists: $VERSION" >&2
+            exit 1
+          fi
+
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "release already exists: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Build artifacts
+        env:
+          VERSION: ${{ inputs.version }}
+        run: make cross VERSION="$VERSION"
+
+      - name: Create release tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$VERSION"
+          git push origin "refs/tags/$VERSION"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+
+          gh release create "$VERSION" pkg/* \
+            --verify-tag \
+            --title "$VERSION" \
+            --notes "$RELEASE_NOTES"
