@@ -14,22 +14,28 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func NewCompleter(ctx context.Context, kubeconfig string) (*Completer, error) {
+func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState, defaultNamespace string) (*Completer, error) {
+	if session == nil {
+		session = NewSessionState("")
+	}
+
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if kubeconfig != "" {
 		loadingRules.ExplicitPath = kubeconfig
 	}
+
+	namespace, err := initialNamespaceFromKubeconfig(kubeconfig, defaultNamespace)
+	if err != nil {
+		return nil, err
+	}
+	session.SetNamespace(namespace)
+
 	loader := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		loadingRules,
 		&clientcmd.ConfigOverrides{},
 	)
 
 	config, err := loader.ClientConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	namespace, _, err := loader.Namespace()
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +55,7 @@ func NewCompleter(ctx context.Context, kubeconfig string) (*Completer, error) {
 	}
 
 	return &Completer{
-		namespace:     namespace,
+		session:       session,
 		namespaceList: namespaces,
 		client:        client,
 		kubeconfig:    kubeconfig,
@@ -57,7 +63,7 @@ func NewCompleter(ctx context.Context, kubeconfig string) (*Completer, error) {
 }
 
 type Completer struct {
-	namespace     string
+	session       *SessionState
 	namespaceList *corev1.NamespaceList
 	client        kubernetes.Interface
 	kubeconfig    string
@@ -67,6 +73,10 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 	if d.TextBeforeCursor() == "" {
 		return []prompt.Suggest{}
 	}
+	if suggests, handled := c.completeSessionCommand(d); handled {
+		return suggests
+	}
+
 	args := strings.Split(d.TextBeforeCursor(), " ")
 	w := d.GetWordBeforeCursor()
 
@@ -89,7 +99,7 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 
 	namespace := checkNamespaceArg(d)
 	if namespace == "" {
-		namespace = c.namespace
+		namespace = c.activeNamespace()
 	}
 	commandArgs, skipNext := excludeOptions(args)
 	if skipNext {
@@ -102,17 +112,52 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 
 func checkNamespaceArg(d prompt.Document) string {
 	args := strings.Split(d.Text, " ")
-	var found bool
 	for i := 0; i < len(args); i++ {
-		if found {
-			return args[i]
-		}
-		if args[i] == "--namespace" || args[i] == "-n" {
-			found = true
-			continue
+		arg := args[i]
+		switch {
+		case arg == "--namespace" || arg == "-n":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+			return ""
+		case strings.HasPrefix(arg, "--namespace="):
+			return strings.TrimPrefix(arg, "--namespace=")
+		case strings.HasPrefix(arg, "-n="):
+			return strings.TrimPrefix(arg, "-n=")
+		case strings.HasPrefix(arg, "-n") && len(arg) > len("-n"):
+			return strings.TrimPrefix(arg, "-n")
 		}
 	}
 	return ""
+}
+
+var sessionCommandSuggestions = []prompt.Suggest{
+	{Text: "namespace", Description: "Show or change the active namespace for this session"},
+	{Text: "exit", Description: "Exit this program"},
+	{Text: "quit", Description: "Exit this program"},
+}
+
+func (c *Completer) completeSessionCommand(d prompt.Document) ([]prompt.Suggest, bool) {
+	text := d.TextBeforeCursor()
+	if !strings.HasPrefix(text, "/") {
+		return nil, false
+	}
+
+	args := strings.Split(text, " ")
+	if len(args) <= 1 {
+		return prompt.FilterHasPrefix(sessionCommandSuggestions, strings.TrimPrefix(args[0], "/"), true), true
+	}
+	if args[0] == "/namespace" && len(args) == 2 {
+		return prompt.FilterHasPrefix(getNameSpaceSuggestions(c.namespaceList), args[1], true), true
+	}
+	return []prompt.Suggest{}, true
+}
+
+func (c *Completer) activeNamespace() string {
+	if c == nil || c.session == nil {
+		return ""
+	}
+	return c.session.Namespace()
 }
 
 /* Option arguments */
@@ -173,11 +218,15 @@ func (c *Completer) completeOptionArguments(ctx context.Context, d prompt.Docume
 	case "exec", "logs", "run", "attach", "port-forward", "cp", "debug":
 		if option == "-c" || option == "--container" {
 			cmdArgs := getCommandArgs(d)
+			namespace := checkNamespaceArg(d)
+			if namespace == "" {
+				namespace = c.activeNamespace()
+			}
 			var suggestions []prompt.Suggest
 			if cmdArgs == nil || len(cmdArgs) < 2 {
-				suggestions = getContainerNamesFromCachedPods(ctx, c.client, c.namespace)
+				suggestions = getContainerNamesFromCachedPods(ctx, c.client, namespace)
 			} else {
-				suggestions = getContainerName(ctx, c.client, c.namespace, cmdArgs[1])
+				suggestions = getContainerName(ctx, c.client, namespace, cmdArgs[1])
 			}
 			return prompt.FilterHasPrefix(
 				suggestions,

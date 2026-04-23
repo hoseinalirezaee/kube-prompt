@@ -13,7 +13,7 @@ type terminalSizeFunc func() (rows, cols int, err error)
 
 type statusLineWriter struct {
 	prompt.ConsoleWriter
-	text string
+	text statusTextFunc
 	size terminalSizeFunc
 
 	rows     int
@@ -21,7 +21,15 @@ type statusLineWriter struct {
 	attached bool
 }
 
+type statusTextFunc func() string
+
 func newStatusLineWriter(out prompt.ConsoleWriter, text string) *statusLineWriter {
+	return newDynamicStatusLineWriter(out, func() string {
+		return text
+	})
+}
+
+func newDynamicStatusLineWriter(out prompt.ConsoleWriter, text statusTextFunc) *statusLineWriter {
 	return &statusLineWriter{
 		ConsoleWriter: out,
 		text:          text,
@@ -120,7 +128,7 @@ func (w *statusLineWriter) renderStatusLine() {
 	w.ConsoleWriter.SaveCursor()
 	w.ConsoleWriter.CursorGoTo(0, 0)
 	w.ConsoleWriter.WriteRawStr("\x1b[7m")
-	w.ConsoleWriter.WriteStr(formatStatusLine(w.text, w.cols))
+	w.ConsoleWriter.WriteStr(formatStatusLine(w.text(), w.cols))
 	w.ConsoleWriter.WriteRawStr("\x1b[0m")
 	w.ConsoleWriter.UnSaveCursor()
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/c-bata/go-prompt"
+	"github.com/hoseinalirezaee/kube-prompt/kube"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -30,6 +31,7 @@ func TestRunHelp(t *testing.T) {
 				"-h, --help",
 				"-v, --version",
 				"--kubeconfig PATH",
+				"--default-namespace NAME",
 				"get pods",
 				"get pods | grep web",
 			} {
@@ -103,7 +105,7 @@ func TestRunRejectsInvalidCLIInput(t *testing.T) {
 func TestParseCLIKubeconfig(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
-	cfg, ok := parseCLI([]string{"--kubeconfig", "/tmp/kubeconfig"}, &stdout, &stderr)
+	cfg, ok := parseCLI([]string{"--kubeconfig", "/tmp/kubeconfig", "--default-namespace", "apps"}, &stdout, &stderr)
 
 	if !ok {
 		t.Fatalf("expected parse to succeed, stderr %q", stderr.String())
@@ -113,6 +115,9 @@ func TestParseCLIKubeconfig(t *testing.T) {
 	}
 	if cfg.kubeconfig != "/tmp/kubeconfig" {
 		t.Fatalf("expected kubeconfig path, got %q", cfg.kubeconfig)
+	}
+	if cfg.defaultNamespace != "apps" {
+		t.Fatalf("expected default namespace, got %q", cfg.defaultNamespace)
 	}
 	if stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("expected no output, stdout %q stderr %q", stdout.String(), stderr.String())
@@ -191,6 +196,20 @@ func TestFormatStatusLine(t *testing.T) {
 	}
 }
 
+func TestKubeconfigStatusLineIncludesNamespace(t *testing.T) {
+	session := kube.NewSessionState("apps")
+	cfg := cliConfig{kubeconfigStatus: "/tmp/config"}
+
+	if got, want := kubeconfigStatusLine(cfg, session), " kube-prompt | kubeconfig: /tmp/config | namespace: apps "; got != want {
+		t.Fatalf("expected status line %q, got %q", want, got)
+	}
+
+	session.SetNamespace("")
+	if got, want := kubeconfigStatusLine(cfg, session), " kube-prompt | kubeconfig: /tmp/config | namespace: - "; got != want {
+		t.Fatalf("expected status line %q, got %q", want, got)
+	}
+}
+
 func TestStatusLineWriterAttachAndClose(t *testing.T) {
 	base := &recordingPromptWriter{}
 	writer := newStatusLineWriter(base, " kube-prompt | kubeconfig: /tmp/config ")
@@ -227,6 +246,27 @@ func TestStatusLineWriterAttachAndClose(t *testing.T) {
 	}
 	if !strings.Contains(out, "<erase-line>") {
 		t.Fatalf("expected status line cleanup, got %q", out)
+	}
+}
+
+func TestStatusLineWriterRendersDynamicText(t *testing.T) {
+	base := &recordingPromptWriter{}
+	text := "first"
+	writer := newDynamicStatusLineWriter(base, func() string {
+		return text
+	})
+	writer.size = func() (rows, cols int, err error) {
+		return 24, 40, nil
+	}
+
+	writer.Attach()
+	base.Reset()
+	text = "second"
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("expected flush to succeed, got %v", err)
+	}
+	if out := base.String(); !strings.Contains(out, "second") {
+		t.Fatalf("expected refreshed dynamic status text, got %q", out)
 	}
 }
 

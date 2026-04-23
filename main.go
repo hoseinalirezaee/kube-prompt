@@ -29,6 +29,7 @@ func main() {
 type cliConfig struct {
 	kubeconfig       string
 	kubeconfigStatus string
+	defaultNamespace string
 	version          bool
 }
 
@@ -75,6 +76,7 @@ func parseCLI(args []string, stdout, stderr io.Writer) (*cliConfig, bool) {
 	fs.BoolVar(&cfg.version, "v", false, "show version")
 	fs.BoolVar(&cfg.version, "version", false, "show version")
 	fs.StringVar(&cfg.kubeconfig, "kubeconfig", "", "path to the kubeconfig file")
+	fs.StringVar(&cfg.defaultNamespace, "default-namespace", "", "namespace to use when commands do not provide one")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err)
 		printUsage(stderr)
@@ -107,12 +109,15 @@ Flags:
   -h, --help              Show help and exit.
   -v, --version           Show version and exit.
       --kubeconfig PATH   Path to the kubeconfig file to use for this session.
+      --default-namespace NAME
+                          Namespace to use when commands do not provide one.
 
 Examples:
   get pods
   describe pod <name>
+  /namespace production
   get pods | grep web
-  exit
+  /exit
 `)
 }
 
@@ -129,14 +134,17 @@ func versionString() string {
 }
 
 func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int {
-	c, err := kube.NewCompleter(ctx, cfg.kubeconfig)
+	session := kube.NewSessionState("")
+	c, err := kube.NewCompleter(ctx, cfg.kubeconfig, session, cfg.defaultNamespace)
 	if err != nil {
 		fmt.Fprintln(stderr, "error", err)
 		return 1
 	}
 
 	defer debug.Teardown()
-	statusWriter := newStatusLineWriter(prompt.NewStdoutWriter(), kubeconfigStatusLine(cfg))
+	statusWriter := newDynamicStatusLineWriter(prompt.NewStdoutWriter(), func() string {
+		return kubeconfigStatusLine(cfg, session)
+	})
 	statusWriter.Attach()
 	defer statusWriter.Close()
 
@@ -156,7 +164,7 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 	}
 
 	p := prompt.New(
-		kube.NewExecutor(cfg.kubeconfig),
+		kube.NewExecutor(cfg.kubeconfig, session),
 		c.Complete,
 		promptOptions...,
 	)
@@ -164,6 +172,10 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 	return 0
 }
 
-func kubeconfigStatusLine(cfg cliConfig) string {
-	return " kube-prompt | kubeconfig: " + cfg.kubeconfigStatus + " "
+func kubeconfigStatusLine(cfg cliConfig, session *kube.SessionState) string {
+	namespace := session.Namespace()
+	if namespace == "" {
+		namespace = "-"
+	}
+	return " kube-prompt | kubeconfig: " + cfg.kubeconfigStatus + " | namespace: " + namespace + " "
 }
