@@ -8,7 +8,7 @@ require (
 	k8s.io/client-go v0.30.3
 )
 
-replace github.com/c-bata/go-prompt => github.com/c-bata/go-prompt v0.2.7-0.20250812090649-d000795a4f93
+replace github.com/c-bata/go-prompt => ./third_party/go-prompt
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
