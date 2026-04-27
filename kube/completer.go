@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/hoseinalirezaee/kube-prompt/prompt"
 	"github.com/hoseinalirezaee/kube-prompt/prompt/completer"
@@ -59,6 +60,7 @@ func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState,
 		namespaceList: namespaces,
 		client:        client,
 		kubeconfig:    kubeconfig,
+		podCache:      newPodWatchCache(ctx, client),
 	}, nil
 }
 
@@ -67,6 +69,23 @@ type Completer struct {
 	namespaceList *corev1.NamespaceList
 	client        kubernetes.Interface
 	kubeconfig    string
+	podCacheMu    sync.Mutex
+	podCache      *podWatchCache
+}
+
+func (c *Completer) Close() {
+	if c == nil {
+		return
+	}
+
+	c.podCacheMu.Lock()
+	podCache := c.podCache
+	c.podCache = nil
+	c.podCacheMu.Unlock()
+
+	if podCache != nil {
+		podCache.close()
+	}
 }
 
 func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
@@ -224,9 +243,9 @@ func (c *Completer) completeOptionArguments(ctx context.Context, d prompt.Docume
 			}
 			var suggestions []prompt.Suggest
 			if cmdArgs == nil || len(cmdArgs) < 2 {
-				suggestions = getContainerNamesFromCachedPods(ctx, c.client, namespace)
+				suggestions = c.getContainerNamesFromCachedPods(ctx, namespace)
 			} else {
-				suggestions = getContainerName(ctx, c.client, namespace, cmdArgs[1])
+				suggestions = c.getContainerName(ctx, namespace, cmdArgs[1])
 			}
 			return prompt.FilterHasPrefix(
 				suggestions,

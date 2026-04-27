@@ -2,8 +2,6 @@ package kube
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,7 +21,6 @@ const thresholdFetchInterval = 10 * time.Second
 
 func init() {
 	lastFetchedAt = new(sync.Map)
-	podList = new(sync.Map)
 	endpointList = new(sync.Map)
 	deploymentList = new(sync.Map)
 	daemonSetList = new(sync.Map)
@@ -156,137 +153,6 @@ func getContextSuggestions(kubeconfig string) []prompt.Suggest {
 	for i := range l {
 		s[i] = prompt.Suggest{
 			Text: l[i],
-		}
-	}
-	return s
-}
-
-/* Pod */
-
-var (
-	podList *sync.Map
-)
-
-func fetchPods(ctx context.Context, client kubernetes.Interface, namespace string) {
-	key := "pod_" + namespace
-	if !shouldFetch(key) {
-		return
-	}
-	updateLastFetchedAt(key)
-
-	l, _ := client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
-	podList.Store(namespace, l)
-}
-
-func getPodSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
-	go fetchPods(ctx, client, namespace)
-	x, ok := podList.Load(namespace)
-	if !ok {
-		return []prompt.Suggest{}
-	}
-	l, ok := x.(*corev1.PodList)
-	if !ok || len(l.Items) == 0 {
-		return []prompt.Suggest{}
-	}
-	s := make([]prompt.Suggest, len(l.Items))
-	for i := range l.Items {
-		s[i] = prompt.Suggest{
-			Text:        l.Items[i].Name,
-			Description: string(l.Items[i].Status.Phase),
-		}
-	}
-	return s
-}
-
-func getPod(namespace, podName string) (corev1.Pod, bool) {
-	x, ok := podList.Load(namespace)
-	if !ok {
-		return corev1.Pod{}, false
-	}
-	l, ok := x.(*corev1.PodList)
-	if !ok || len(l.Items) == 0 {
-		return corev1.Pod{}, false
-	}
-	for i := range l.Items {
-		if podName == l.Items[i].Name {
-			return l.Items[i], true
-		}
-	}
-	return corev1.Pod{}, false
-}
-
-func getPortsFromPodName(namespace string, podName string) []prompt.Suggest {
-	pod, found := getPod(namespace, podName)
-	if !found {
-		return []prompt.Suggest{}
-	}
-
-	// Extract unique ports
-	portSet := make(map[int32]struct{})
-	for i := range pod.Spec.Containers {
-		ports := pod.Spec.Containers[i].Ports
-		for j := range ports {
-			portSet[ports[j].ContainerPort] = struct{}{}
-		}
-	}
-
-	// Sort
-	var ports []int
-	for k := range portSet {
-		ports = append(ports, int(k))
-	}
-	sort.Ints(ports)
-
-	// Prepare suggestions
-	suggests := make([]prompt.Suggest, 0, len(ports))
-	for i := range ports {
-		suggests = append(suggests, prompt.Suggest{
-			Text: fmt.Sprintf("%d:%d", ports[i], ports[i]),
-		})
-	}
-	return suggests
-}
-
-func getContainerNamesFromCachedPods(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
-	go fetchPods(ctx, client, namespace)
-
-	x, ok := podList.Load(namespace)
-	if !ok {
-		return []prompt.Suggest{}
-	}
-	l, ok := x.(*corev1.PodList)
-	if !ok || len(l.Items) == 0 {
-		return []prompt.Suggest{}
-	}
-	// container name -> pod name
-	set := make(map[string]string, len(l.Items))
-	for i := range l.Items {
-		for j := range l.Items[i].Spec.Containers {
-			set[l.Items[i].Spec.Containers[j].Name] = l.Items[i].Name
-		}
-	}
-	s := make([]prompt.Suggest, 0, len(set))
-	for key := range set {
-		s = append(s, prompt.Suggest{
-			Text:        key,
-			Description: "Pod Name: " + set[key],
-		})
-	}
-	return s
-}
-
-func getContainerName(ctx context.Context, client kubernetes.Interface, namespace string, podName string) []prompt.Suggest {
-	go fetchPods(ctx, client, namespace)
-
-	pod, found := getPod(namespace, podName)
-	if !found {
-		return []prompt.Suggest{}
-	}
-	s := make([]prompt.Suggest, len(pod.Spec.Containers))
-	for i := range pod.Spec.Containers {
-		s[i] = prompt.Suggest{
-			Text:        pod.Spec.Containers[i].Name,
-			Description: "",
 		}
 	}
 	return s

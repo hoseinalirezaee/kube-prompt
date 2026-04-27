@@ -220,7 +220,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 		}
 	case "logs":
 		if len(args) == 2 {
-			return prompt.FilterContains(getPodSuggestions(ctx, c.client, namespace), args[1], true)
+			return prompt.FilterContains(c.getPodSuggestions(ctx, namespace), args[1], true)
 		}
 	case "rolling-update", "rollingupdate":
 		if len(args) == 2 {
@@ -256,28 +256,28 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 		}
 	case "attach":
 		if len(args) == 2 {
-			return prompt.FilterContains(getPodSuggestions(ctx, c.client, namespace), args[1], true)
+			return prompt.FilterContains(c.getPodSuggestions(ctx, namespace), args[1], true)
 		}
 	case "exec":
 		if len(args) == 2 {
-			return prompt.FilterContains(getPodSuggestions(ctx, c.client, namespace), args[1], true)
+			return prompt.FilterContains(c.getPodSuggestions(ctx, namespace), args[1], true)
 		}
 	case "debug":
 		if len(args) == 2 {
-			pods := getPodSuggestions(ctx, c.client, namespace)
+			pods := c.getPodSuggestions(ctx, namespace)
 			nodes := addPrefixToSuggestions(getNodeSuggestions(ctx, c.client), "node/")
 			return prompt.FilterContains(append(pods, nodes...), args[1], true)
 		}
 	case "cp":
 		if len(args) == 2 || len(args) == 3 {
-			return prompt.FilterContains(getPodSuggestions(ctx, c.client, namespace), args[len(args)-1], true)
+			return prompt.FilterContains(c.getPodSuggestions(ctx, namespace), args[len(args)-1], true)
 		}
 	case "port-forward":
 		if len(args) == 2 {
-			return prompt.FilterContains(getPodSuggestions(ctx, c.client, namespace), args[1], true)
+			return prompt.FilterContains(c.getPodSuggestions(ctx, namespace), args[1], true)
 		}
 		if len(args) == 3 {
-			return prompt.FilterHasPrefix(getPortsFromPodName(namespace, args[1]), args[2], true)
+			return prompt.FilterHasPrefix(c.getPortsFromPodName(ctx, namespace, args[1]), args[2], true)
 		}
 	case "rollout":
 		if len(args) == 2 {
@@ -344,7 +344,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 			case "no", "node", "nodes":
 				return prompt.FilterContains(getNodeSuggestions(ctx, c.client), third, true)
 			case "po", "pod", "pods":
-				return prompt.FilterContains(getPodSuggestions(ctx, c.client, namespace), third, true)
+				return prompt.FilterContains(c.getPodSuggestions(ctx, namespace), third, true)
 			}
 		}
 	default:
@@ -420,7 +420,7 @@ func (c *Completer) getResourceNameSuggestions(ctx context.Context, namespace, c
 	case "nodes":
 		return getNodeSuggestions(ctx, c.client)
 	case "pods":
-		return getPodSuggestions(ctx, c.client, namespace)
+		return c.getPodSuggestions(ctx, namespace)
 	case "persistentvolumeclaims":
 		return getPersistentVolumeClaimSuggestions(ctx, c.client, namespace)
 	case "persistentvolumes":

@@ -100,7 +100,7 @@ func TestGenericResourceCommandsUseDiscovery(t *testing.T) {
 		},
 	}
 	c := &Completer{client: client}
-	fetchPods(ctx, client, namespace)
+	defer c.Close()
 
 	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"patch", "p"}), "pods", "v1")
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"patch", "po", "web"}), []string{"web-0"})
@@ -118,8 +118,8 @@ func TestNodeAndPodSpecificCommands(t *testing.T) {
 		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-0", Namespace: namespace}},
 	)
 	c := &Completer{client: client}
+	defer c.Close()
 	fetchNodeList(ctx, client)
-	fetchPods(ctx, client, namespace)
 
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"taint", "nodes", "work"}), []string{"worker-1"})
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"debug", "web"}), []string{"web-0"})

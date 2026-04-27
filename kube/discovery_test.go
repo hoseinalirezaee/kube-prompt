@@ -128,8 +128,8 @@ func TestDiscoveredResourceNameCompletionUsesDiscoveredShortName(t *testing.T) {
 		},
 	}
 	c := &Completer{client: client}
+	defer c.Close()
 
-	fetchPods(ctx, client, namespace)
 	suggestions := c.argumentsCompleter(ctx, namespace, []string{"get", "po", "web"})
 
 	assertSuggestionTexts(t, suggestions, []string{"web-0"})

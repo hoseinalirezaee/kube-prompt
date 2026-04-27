@@ -140,6 +140,7 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "error", err)
 		return 1
 	}
+	defer c.Close()
 
 	defer debug.Teardown()
 	statusWriter := newDynamicStatusLineWriter(prompt.NewStdoutWriter(), func() string {
