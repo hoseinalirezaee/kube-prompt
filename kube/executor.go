@@ -11,17 +11,17 @@ import (
 	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
 )
 
-func NewExecutor(kubeconfig string, session *SessionState) func(string) {
+func NewExecutor(kubeconfig, proxyURL string, session *SessionState) func(string) {
 	return func(s string) {
-		execute(s, kubeconfig, session)
+		execute(s, kubeconfig, proxyURL, session)
 	}
 }
 
 func Executor(s string) {
-	execute(s, "", NewSessionState(""))
+	execute(s, "", "", NewSessionState(""))
 }
 
-func execute(s, kubeconfig string, session *SessionState) {
+func execute(s, kubeconfig, proxyURL string, session *SessionState) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return
@@ -33,7 +33,7 @@ func execute(s, kubeconfig string, session *SessionState) {
 		return
 	}
 
-	cmd := kubectlCommand(s, kubeconfig, session.Namespace())
+	cmd := kubectlCommand(s, kubeconfig, session.Namespace(), proxyURL)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -54,7 +54,7 @@ func ExecuteAndGetResultWithKubeconfig(s, kubeconfig string) string {
 	}
 
 	out := &bytes.Buffer{}
-	cmd := kubectlCommand(s, kubeconfig, "")
+	cmd := kubectlCommand(s, kubeconfig, "", "")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = out
 	if err := cmd.Run(); err != nil {
@@ -106,12 +106,51 @@ func runSessionCommand(s string, session *SessionState, out io.Writer) sessionCo
 	return sessionCommandResult{handled: true}
 }
 
-func kubectlCommand(s, kubeconfig, namespace string) *exec.Cmd {
+func kubectlCommand(s, kubeconfig, namespace, proxyURL string) *exec.Cmd {
 	cmd := exec.Command("/bin/sh", "-c", kubectlCommandLine(s, namespace))
-	if kubeconfig != "" {
-		cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
+	if kubeconfig != "" || proxyURL != "" {
+		cmd.Env = kubectlEnv(os.Environ(), kubeconfig, proxyURL)
 	}
 	return cmd
+}
+
+func kubectlEnv(base []string, kubeconfig, proxyURL string) []string {
+	env := make([]string, 0, len(base)+8)
+	for _, item := range base {
+		key, _, _ := strings.Cut(item, "=")
+		if key == "KUBECONFIG" && kubeconfig != "" {
+			continue
+		}
+		if proxyURL != "" && isProxyEnvKey(key) {
+			continue
+		}
+		env = append(env, item)
+	}
+
+	if kubeconfig != "" {
+		env = append(env, "KUBECONFIG="+kubeconfig)
+	}
+	if proxyURL != "" {
+		env = append(env,
+			"HTTP_PROXY="+proxyURL,
+			"HTTPS_PROXY="+proxyURL,
+			"ALL_PROXY="+proxyURL,
+			"http_proxy="+proxyURL,
+			"https_proxy="+proxyURL,
+			"all_proxy="+proxyURL,
+		)
+	}
+	return env
+}
+
+func isProxyEnvKey(key string) bool {
+	switch key {
+	case "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+		"http_proxy", "https_proxy", "all_proxy", "no_proxy":
+		return true
+	default:
+		return false
+	}
 }
 
 func kubectlCommandLine(s, namespace string) string {

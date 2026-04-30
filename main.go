@@ -30,6 +30,8 @@ type cliConfig struct {
 	kubeconfig       string
 	kubeconfigStatus string
 	defaultNamespace string
+	proxyURL         string
+	proxyStatus      string
 	version          bool
 }
 
@@ -46,6 +48,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	resolved = resolveProxyStatus(resolved)
 	return runPrompt(context.TODO(), resolved, stdout, stderr)
 }
 
@@ -77,6 +80,7 @@ func parseCLI(args []string, stdout, stderr io.Writer) (*cliConfig, bool) {
 	fs.BoolVar(&cfg.version, "version", false, "show version")
 	fs.StringVar(&cfg.kubeconfig, "kubeconfig", "", "path to the kubeconfig file")
 	fs.StringVar(&cfg.defaultNamespace, "default-namespace", "", "namespace to use when commands do not provide one")
+	fs.StringVar(&cfg.proxyURL, "proxy", "", "proxy URL for Kubernetes API requests")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err)
 		printUsage(stderr)
@@ -96,7 +100,24 @@ func parseCLI(args []string, stdout, stderr io.Writer) (*cliConfig, bool) {
 		printUsage(stderr)
 		return nil, false
 	}
+	if err := kube.ValidateProxyURL(cfg.proxyURL); err != nil {
+		fmt.Fprintln(stderr, err)
+		printUsage(stderr)
+		return nil, false
+	}
 	return &cfg, true
+}
+
+func resolveProxyStatus(cfg cliConfig) cliConfig {
+	if cfg.proxyURL != "" {
+		cfg.proxyStatus = kube.ProxyDisplayString(cfg.proxyURL)
+		return cfg
+	}
+	proxyStatus, err := kube.KubeconfigProxyDisplayString(cfg.kubeconfig)
+	if err == nil {
+		cfg.proxyStatus = proxyStatus
+	}
+	return cfg
 }
 
 func printUsage(w io.Writer) {
@@ -111,6 +132,8 @@ Flags:
       --kubeconfig PATH   Path to the kubeconfig file to use for this session.
       --default-namespace NAME
                           Namespace to use when commands do not provide one.
+      --proxy URL         Proxy URL for Kubernetes API requests.
+                          Supports http, https, and socks5h.
 
 Examples:
   get pods
@@ -135,7 +158,7 @@ func versionString() string {
 
 func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int {
 	session := kube.NewSessionState("")
-	c, err := kube.NewCompleter(ctx, cfg.kubeconfig, session, cfg.defaultNamespace)
+	c, err := kube.NewCompleter(ctx, cfg.kubeconfig, session, cfg.defaultNamespace, cfg.proxyURL)
 	if err != nil {
 		fmt.Fprintln(stderr, "error", err)
 		return 1
@@ -165,7 +188,7 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 	}
 
 	p := prompt.New(
-		kube.NewExecutor(cfg.kubeconfig, session),
+		kube.NewExecutor(cfg.kubeconfig, cfg.proxyURL, session),
 		c.Complete,
 		promptOptions...,
 	)
@@ -178,5 +201,9 @@ func kubeconfigStatusLine(cfg cliConfig, session *kube.SessionState) string {
 	if namespace == "" {
 		namespace = "-"
 	}
-	return " kube-prompt | kubeconfig: " + cfg.kubeconfigStatus + " | namespace: " + namespace + " "
+	proxyStatus := cfg.proxyStatus
+	if proxyStatus == "" {
+		proxyStatus = "-"
+	}
+	return " kube-prompt | kubeconfig: " + cfg.kubeconfigStatus + " | namespace: " + namespace + " | proxy: " + proxyStatus + " "
 }

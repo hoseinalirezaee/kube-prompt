@@ -1,13 +1,127 @@
 package kube
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hoseinalirezaee/kube-prompt/prompt"
 	"github.com/hoseinalirezaee/kube-prompt/prompt/completer"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestNewCompleterUsesExplicitProxy(t *testing.T) {
+	proxyRequests := make(chan string, 1)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequests <- r.URL.String()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"NamespaceList","apiVersion":"v1","items":[{"metadata":{"name":"default"}}]}`))
+	}))
+	defer proxy.Close()
+
+	kubeconfig := writeKubeconfigForServer(t, "http://kube-api.invalid", "")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	c, err := NewCompleter(ctx, kubeconfig, NewSessionState(""), "", proxy.URL)
+	if err != nil {
+		t.Fatalf("expected completer through proxy, got error %v", err)
+	}
+	defer c.Close()
+
+	select {
+	case got := <-proxyRequests:
+		if !strings.HasPrefix(got, "http://kube-api.invalid/api/v1/namespaces") {
+			t.Fatalf("expected namespace request through proxy, got %q", got)
+		}
+	default:
+		t.Fatal("expected proxy to receive namespace request")
+	}
+}
+
+func TestNewCompleterExplicitProxyOverridesKubeconfigProxy(t *testing.T) {
+	proxyRequests := make(chan string, 1)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequests <- r.URL.String()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"NamespaceList","apiVersion":"v1","items":[]}`))
+	}))
+	defer proxy.Close()
+
+	kubeconfig := writeKubeconfigForServer(t, "http://kube-api.invalid", "http://127.0.0.1:1")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	c, err := NewCompleter(ctx, kubeconfig, NewSessionState(""), "", proxy.URL)
+	if err != nil {
+		t.Fatalf("expected completer through explicit proxy, got error %v", err)
+	}
+	defer c.Close()
+
+	select {
+	case <-proxyRequests:
+	default:
+		t.Fatal("expected explicit proxy to receive namespace request")
+	}
+}
+
+func TestNewRESTConfigAcceptsSocks5hProxy(t *testing.T) {
+	kubeconfig := writeKubeconfigForServer(t, "http://kube-api.invalid", "")
+
+	config, err := newRESTConfig(kubeconfig, "socks5h://user:pass@proxy.example:1080")
+	if err != nil {
+		t.Fatalf("expected socks5h proxy config, got error %v", err)
+	}
+	if config.Proxy == nil {
+		t.Fatal("expected proxy function to be set")
+	}
+
+	got, err := config.Proxy(&http.Request{URL: &url.URL{Scheme: "http", Host: "kube-api.invalid"}})
+	if err != nil {
+		t.Fatalf("expected proxy function to succeed, got %v", err)
+	}
+	if got.String() != "socks5h://user:pass@proxy.example:1080" {
+		t.Fatalf("expected socks5h proxy URL, got %q", got.String())
+	}
+}
+
+func writeKubeconfigForServer(t *testing.T, server, proxyURL string) string {
+	t.Helper()
+
+	proxyLine := ""
+	if proxyURL != "" {
+		proxyLine = "    proxy-url: " + proxyURL + "\n"
+	}
+	data := `apiVersion: v1
+kind: Config
+current-context: test
+clusters:
+- name: test
+  cluster:
+    server: ` + server + `
+` + proxyLine + `users:
+- name: test
+  user:
+    token: test
+contexts:
+- name: test
+  context:
+    cluster: test
+    user: test
+`
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatalf("failed to write kubeconfig: %v", err)
+	}
+	return path
+}
 
 func TestSessionCommandCompletion(t *testing.T) {
 	b := prompt.NewBuffer()

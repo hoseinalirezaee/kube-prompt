@@ -32,6 +32,7 @@ func TestRunHelp(t *testing.T) {
 				"-v, --version",
 				"--kubeconfig PATH",
 				"--default-namespace NAME",
+				"--proxy URL",
 				"get pods",
 				"get pods | grep web",
 			} {
@@ -105,7 +106,11 @@ func TestRunRejectsInvalidCLIInput(t *testing.T) {
 func TestParseCLIKubeconfig(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
-	cfg, ok := parseCLI([]string{"--kubeconfig", "/tmp/kubeconfig", "--default-namespace", "apps"}, &stdout, &stderr)
+	cfg, ok := parseCLI([]string{
+		"--kubeconfig", "/tmp/kubeconfig",
+		"--default-namespace", "apps",
+		"--proxy", "https://user:pass@proxy.example:8443",
+	}, &stdout, &stderr)
 
 	if !ok {
 		t.Fatalf("expected parse to succeed, stderr %q", stderr.String())
@@ -119,8 +124,65 @@ func TestParseCLIKubeconfig(t *testing.T) {
 	if cfg.defaultNamespace != "apps" {
 		t.Fatalf("expected default namespace, got %q", cfg.defaultNamespace)
 	}
+	if cfg.proxyURL != "https://user:pass@proxy.example:8443" {
+		t.Fatalf("expected proxy URL, got %q", cfg.proxyURL)
+	}
 	if stdout.Len() != 0 || stderr.Len() != 0 {
 		t.Fatalf("expected no output, stdout %q stderr %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestParseCLIProxyValidation(t *testing.T) {
+	for _, proxyURL := range []string{
+		"http://proxy.example:8080",
+		"https://proxy.example:8443",
+		"socks5h://proxy.example:1080",
+	} {
+		t.Run(proxyURL, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+
+			cfg, ok := parseCLI([]string{"--proxy", proxyURL}, &stdout, &stderr)
+
+			if !ok {
+				t.Fatalf("expected proxy to parse, stderr %q", stderr.String())
+			}
+			if cfg.proxyURL != proxyURL {
+				t.Fatalf("expected proxy URL %q, got %q", proxyURL, cfg.proxyURL)
+			}
+		})
+	}
+}
+
+func TestParseCLIRejectsInvalidProxy(t *testing.T) {
+	for _, proxyURL := range []string{
+		"socks5://proxy.example:1080",
+		"http:///missing-host",
+		"://bad",
+	} {
+		t.Run(proxyURL, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+
+			cfg, ok := parseCLI([]string{"--proxy", proxyURL}, &stdout, &stderr)
+
+			if ok || cfg != nil {
+				t.Fatalf("expected invalid proxy to fail, cfg %#v", cfg)
+			}
+			errOut := stderr.String()
+			if !strings.Contains(errOut, "proxy URL") {
+				t.Fatalf("expected proxy error, got %q", errOut)
+			}
+			if !strings.Contains(errOut, "Usage: kube-prompt [flags]") {
+				t.Fatalf("expected usage, got %q", errOut)
+			}
+		})
+	}
+}
+
+func TestResolveProxyStatusStripsCredentials(t *testing.T) {
+	cfg := resolveProxyStatus(cliConfig{proxyURL: "https://user:pass@proxy.example:8443"})
+
+	if got, want := cfg.proxyStatus, "https://proxy.example:8443"; got != want {
+		t.Fatalf("expected sanitized proxy status %q, got %q", want, got)
 	}
 }
 
@@ -200,12 +262,24 @@ func TestKubeconfigStatusLineIncludesNamespace(t *testing.T) {
 	session := kube.NewSessionState("apps")
 	cfg := cliConfig{kubeconfigStatus: "/tmp/config"}
 
-	if got, want := kubeconfigStatusLine(cfg, session), " kube-prompt | kubeconfig: /tmp/config | namespace: apps "; got != want {
+	if got, want := kubeconfigStatusLine(cfg, session), " kube-prompt | kubeconfig: /tmp/config | namespace: apps | proxy: - "; got != want {
 		t.Fatalf("expected status line %q, got %q", want, got)
 	}
 
 	session.SetNamespace("")
-	if got, want := kubeconfigStatusLine(cfg, session), " kube-prompt | kubeconfig: /tmp/config | namespace: - "; got != want {
+	if got, want := kubeconfigStatusLine(cfg, session), " kube-prompt | kubeconfig: /tmp/config | namespace: - | proxy: - "; got != want {
+		t.Fatalf("expected status line %q, got %q", want, got)
+	}
+}
+
+func TestKubeconfigStatusLineIncludesSanitizedProxy(t *testing.T) {
+	session := kube.NewSessionState("apps")
+	cfg := cliConfig{
+		kubeconfigStatus: "/tmp/config",
+		proxyStatus:      "https://proxy.example:8443",
+	}
+
+	if got, want := kubeconfigStatusLine(cfg, session), " kube-prompt | kubeconfig: /tmp/config | namespace: apps | proxy: https://proxy.example:8443 "; got != want {
 		t.Fatalf("expected status line %q, got %q", want, got)
 	}
 }

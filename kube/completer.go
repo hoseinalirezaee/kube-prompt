@@ -12,17 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
-func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState, defaultNamespace string) (*Completer, error) {
+func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState, defaultNamespace, proxyURL string) (*Completer, error) {
 	if session == nil {
 		session = NewSessionState("")
-	}
-
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	if kubeconfig != "" {
-		loadingRules.ExplicitPath = kubeconfig
 	}
 
 	namespace, err := initialNamespaceFromKubeconfig(kubeconfig, defaultNamespace)
@@ -31,12 +25,7 @@ func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState,
 	}
 	session.SetNamespace(namespace)
 
-	loader := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules,
-		&clientcmd.ConfigOverrides{},
-	)
-
-	config, err := loader.ClientConfig()
+	config, err := newRESTConfig(kubeconfig, proxyURL)
 	if err != nil {
 		return nil, err
 	}

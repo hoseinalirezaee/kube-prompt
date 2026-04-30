@@ -7,7 +7,7 @@ import (
 )
 
 func TestKubectlCommandSetsKubeconfigEnv(t *testing.T) {
-	cmd := kubectlCommand("get pods", "/tmp/kubeconfig", "")
+	cmd := kubectlCommand("get pods", "/tmp/kubeconfig", "", "")
 
 	if cmd.Env == nil {
 		t.Fatal("expected command environment to be set")
@@ -17,11 +17,73 @@ func TestKubectlCommandSetsKubeconfigEnv(t *testing.T) {
 	}
 }
 
+func TestKubectlEnvKeepsExistingProxyEnvWithoutExplicitProxy(t *testing.T) {
+	env := kubectlEnv([]string{
+		"HTTP_PROXY=http://old.example",
+		"NO_PROXY=example.com",
+	}, "/tmp/kubeconfig", "")
+
+	if !hasEnv(env, "HTTP_PROXY=http://old.example") {
+		t.Fatalf("expected existing HTTP_PROXY to remain, got %v", env)
+	}
+	if !hasEnv(env, "NO_PROXY=example.com") {
+		t.Fatalf("expected existing NO_PROXY to remain, got %v", env)
+	}
+}
+
 func TestKubectlCommandLeavesDefaultEnvWithoutKubeconfig(t *testing.T) {
-	cmd := kubectlCommand("get pods", "", "")
+	cmd := kubectlCommand("get pods", "", "", "")
 
 	if cmd.Env != nil {
 		t.Fatalf("expected nil command environment, got %v", cmd.Env)
+	}
+}
+
+func TestKubectlCommandSetsProxyEnv(t *testing.T) {
+	cmd := kubectlCommand("get pods", "/tmp/kubeconfig", "", "socks5h://proxy.example:1080")
+
+	for _, want := range []string{
+		"KUBECONFIG=/tmp/kubeconfig",
+		"HTTP_PROXY=socks5h://proxy.example:1080",
+		"HTTPS_PROXY=socks5h://proxy.example:1080",
+		"ALL_PROXY=socks5h://proxy.example:1080",
+		"http_proxy=socks5h://proxy.example:1080",
+		"https_proxy=socks5h://proxy.example:1080",
+		"all_proxy=socks5h://proxy.example:1080",
+	} {
+		if !hasEnv(cmd.Env, want) {
+			t.Fatalf("expected %s in command environment, got %v", want, cmd.Env)
+		}
+	}
+}
+
+func TestKubectlEnvProxyOverridesExistingProxyEnv(t *testing.T) {
+	env := kubectlEnv([]string{
+		"PATH=/bin",
+		"HTTP_PROXY=http://old.example",
+		"https_proxy=http://old.example",
+		"NO_PROXY=example.com",
+		"no_proxy=example.com",
+	}, "", "https://proxy.example:8443")
+
+	for _, unwanted := range []string{
+		"HTTP_PROXY=http://old.example",
+		"https_proxy=http://old.example",
+		"NO_PROXY=example.com",
+		"no_proxy=example.com",
+	} {
+		if hasEnv(env, unwanted) {
+			t.Fatalf("did not expect %s in command environment, got %v", unwanted, env)
+		}
+	}
+	for _, want := range []string{
+		"PATH=/bin",
+		"HTTP_PROXY=https://proxy.example:8443",
+		"https_proxy=https://proxy.example:8443",
+	} {
+		if !hasEnv(env, want) {
+			t.Fatalf("expected %s in command environment, got %v", want, env)
+		}
 	}
 }
 
