@@ -54,12 +54,13 @@ func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState,
 }
 
 type Completer struct {
-	session       *SessionState
-	namespaceList *corev1.NamespaceList
-	client        kubernetes.Interface
-	kubeconfig    string
-	podCacheMu    sync.Mutex
-	podCache      *podWatchCache
+	session        *SessionState
+	namespaceList  *corev1.NamespaceList
+	client         kubernetes.Interface
+	kubeconfig     string
+	podCacheMu     sync.Mutex
+	podCache       *podWatchCache
+	shellCompleter shellCompleter
 }
 
 func (c *Completer) Close() {
@@ -78,22 +79,20 @@ func (c *Completer) Close() {
 }
 
 func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
-	if d.TextBeforeCursor() == "" {
+	text := d.TextBeforeCursor()
+	if text == "" {
 		return []prompt.Suggest{}
 	}
 	if suggests, handled := c.completeSessionCommand(d); handled {
 		return suggests
 	}
 
-	args := strings.Split(d.TextBeforeCursor(), " ")
-	w := d.GetWordBeforeCursor()
-
-	// If PIPE is in text before the cursor, returns empty suggestions.
-	for i := range args {
-		if args[i] == "|" {
-			return []prompt.Suggest{}
-		}
+	if segment, ok := textAfterLastShellPipe(text); ok {
+		return c.completeShellSegment(segment)
 	}
+
+	args := strings.Split(text, " ")
+	w := d.GetWordBeforeCursor()
 
 	// If word before the cursor starts with "-", returns CLI flag options.
 	if strings.HasPrefix(w, "-") {
@@ -116,6 +115,14 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 		return []prompt.Suggest{}
 	}
 	return c.argumentsCompleter(context.TODO(), namespace, commandArgs)
+}
+
+func (c *Completer) completeShellSegment(segment string) []prompt.Suggest {
+	shellCompleter := c.shellCompleter
+	if shellCompleter == nil {
+		shellCompleter = newBashShellCompleter()
+	}
+	return shellCompleter.Complete(segment)
 }
 
 func checkNamespaceArg(d prompt.Document) string {

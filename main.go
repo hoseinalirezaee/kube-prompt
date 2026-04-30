@@ -22,6 +22,8 @@ var (
 	revision string
 )
 
+var completionWordSeparator = completer.FilePathCompletionSeparator + "|"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -181,7 +183,7 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 		prompt.OptionTitle("kube-prompt: interactive kubernetes client"),
 		prompt.OptionPrefix(">>> "),
 		prompt.OptionInputTextColor(prompt.Yellow),
-		prompt.OptionCompletionWordSeparator(completer.FilePathCompletionSeparator),
+		prompt.OptionCompletionWordSeparator(completionWordSeparator),
 	}
 	if statusWriter.attached {
 		promptOptions = append(promptOptions, prompt.OptionParser(newStatusLineParser(prompt.NewStandardInputParser())))

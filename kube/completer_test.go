@@ -15,6 +15,7 @@ import (
 	"github.com/hoseinalirezaee/kube-prompt/prompt/completer"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestNewCompleterUsesExplicitProxy(t *testing.T) {
@@ -171,6 +172,55 @@ func TestNamespaceSessionCommandSuggestsClusterNamespaces(t *testing.T) {
 	assertSuggestionTexts(t, c.Complete(*b.Document()), []string{"prod"})
 }
 
+func TestCompleterDelegatesCurrentPipeSegmentToShellCompleter(t *testing.T) {
+	b := prompt.NewBuffer()
+	b.InsertText("get pods | gr", false, true)
+	c := &Completer{
+		shellCompleter: fakeShellCompleter{
+			" gr": {{Text: "grep", Description: "command"}},
+		},
+	}
+
+	assertSuggestionTexts(t, c.Complete(*b.Document()), []string{"grep"})
+}
+
+func TestCompleterUsesLastPipeSegment(t *testing.T) {
+	b := prompt.NewBuffer()
+	b.InsertText("get pods | grep web | aw", false, true)
+	c := &Completer{
+		shellCompleter: fakeShellCompleter{
+			" aw": {{Text: "awk", Description: "command"}},
+		},
+	}
+
+	assertSuggestionTexts(t, c.Complete(*b.Document()), []string{"awk"})
+}
+
+func TestCompleterPreservesKubectlCompletionBeforePipe(t *testing.T) {
+	resetDiscoveryCache()
+	resetResourceCache()
+	b := prompt.NewBuffer()
+	b.InsertText("get po", false, true)
+	client := fake.NewSimpleClientset()
+	client.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "v1",
+			APIResources: []metav1.APIResource{
+				{
+					Name:         "pods",
+					SingularName: "pod",
+					ShortNames:   []string{"po"},
+					Namespaced:   true,
+					Verbs:        metav1.Verbs{"get", "list"},
+				},
+			},
+		},
+	}
+	c := &Completer{client: client}
+
+	assertSuggestionContains(t, c.Complete(*b.Document()), "pods", "v1")
+}
+
 func TestCheckNamespaceArgSupportsKubectlForms(t *testing.T) {
 	tests := []struct {
 		input string
@@ -201,4 +251,10 @@ func acceptSuggestionForTest(b *prompt.Buffer, text string) string {
 	}
 	b.InsertText(text, false, true)
 	return b.Text()
+}
+
+type fakeShellCompleter map[string][]prompt.Suggest
+
+func (f fakeShellCompleter) Complete(segment string) []prompt.Suggest {
+	return f[segment]
 }

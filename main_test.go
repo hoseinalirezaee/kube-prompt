@@ -70,6 +70,21 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestCompletionWordSeparatorPreservesPipeOnAccept(t *testing.T) {
+	b := prompt.NewBuffer()
+	b.InsertText("get pods |gr", false, true)
+
+	w := b.Document().GetWordBeforeCursorUntilSeparator(completionWordSeparator)
+	if w != "" {
+		b.DeleteBeforeCursor(len([]rune(w)))
+	}
+	b.InsertText("grep", false, true)
+
+	if got, want := b.Text(), "get pods |grep"; got != want {
+		t.Fatalf("expected accepted suggestion to produce %q, got %q", want, got)
+	}
+}
+
 func TestRunRejectsInvalidCLIInput(t *testing.T) {
 	tests := []struct {
 		name string
