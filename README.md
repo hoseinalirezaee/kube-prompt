@@ -33,8 +33,8 @@ Binaries are available from [GitHub Releases](https://github.com/hoseinalirezaee
 <summary>macOS (darwin) - amd64</summary>
 
 ```
-wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.1.0/kube-prompt_v2.1.0_darwin_amd64.zip
-unzip kube-prompt_v2.1.0_darwin_amd64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.2.0/kube-prompt_v2.2.0_darwin_amd64.zip
+unzip kube-prompt_v2.2.0_darwin_amd64.zip
 chmod +x kube-prompt
 sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 ```
@@ -45,8 +45,8 @@ sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 <summary>macOS (darwin) - arm64</summary>
 
 ```
-wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.1.0/kube-prompt_v2.1.0_darwin_arm64.zip
-unzip kube-prompt_v2.1.0_darwin_arm64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.2.0/kube-prompt_v2.2.0_darwin_arm64.zip
+unzip kube-prompt_v2.2.0_darwin_arm64.zip
 chmod +x kube-prompt
 sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 ```
@@ -57,8 +57,8 @@ sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 <summary>Linux - amd64</summary>
 
 ```
-wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.1.0/kube-prompt_v2.1.0_linux_amd64.zip
-unzip kube-prompt_v2.1.0_linux_amd64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.2.0/kube-prompt_v2.2.0_linux_amd64.zip
+unzip kube-prompt_v2.2.0_linux_amd64.zip
 chmod +x kube-prompt
 sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 ```
@@ -70,8 +70,8 @@ sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 <summary>Linux - arm64</summary>
 
 ```
-wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.1.0/kube-prompt_v2.1.0_linux_arm64.zip
-unzip kube-prompt_v2.1.0_linux_arm64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.2.0/kube-prompt_v2.2.0_linux_arm64.zip
+unzip kube-prompt_v2.2.0_linux_arm64.zip
 chmod +x kube-prompt
 sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 ```
@@ -82,8 +82,8 @@ sudo mv ./kube-prompt /usr/local/bin/kube-prompt
 <summary>Windows - amd64</summary>
 
 ```
-wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.1.0/kube-prompt_v2.1.0_windows_amd64.zip
-unzip kube-prompt_v2.1.0_windows_amd64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.2.0/kube-prompt_v2.2.0_windows_amd64.zip
+unzip kube-prompt_v2.2.0_windows_amd64.zip
 ```
 
 </details>
@@ -92,8 +92,8 @@ unzip kube-prompt_v2.1.0_windows_amd64.zip
 <summary>Windows - arm64</summary>
 
 ```
-wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.1.0/kube-prompt_v2.1.0_windows_arm64.zip
-unzip kube-prompt_v2.1.0_windows_arm64.zip
+wget https://github.com/hoseinalirezaee/kube-prompt/releases/download/v2.2.0/kube-prompt_v2.2.0_windows_arm64.zip
+unzip kube-prompt_v2.2.0_windows_arm64.zip
 ```
 
 </details>
