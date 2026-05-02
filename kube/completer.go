@@ -147,7 +147,10 @@ func checkNamespaceArg(d prompt.Document) string {
 }
 
 var sessionCommandSuggestions = []prompt.Suggest{
+	{Text: "help", Description: "Show kube-prompt shortcuts and prompt commands"},
 	{Text: "namespace", Description: "Show or change the active namespace for this session"},
+	{Text: "output", Description: "Save captured command output"},
+	{Text: "outputs", Description: "Browse captured command output"},
 	{Text: "exit", Description: "Exit this program"},
 	{Text: "quit", Description: "Exit this program"},
 }

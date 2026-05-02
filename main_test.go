@@ -70,6 +70,27 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestPrintStartupMessage(t *testing.T) {
+	origVersion, origRevision := version, revision
+	version, revision = "v1.2.3", "abc123"
+	defer func() {
+		version, revision = origVersion, origRevision
+	}()
+
+	var out bytes.Buffer
+	printStartupMessage(&out)
+
+	for _, expected := range []string{
+		"kube-prompt v1.2.3 (rev-abc123)",
+		"Please use `exit` or `Ctrl-D` to exit this program.",
+		"Type `/help` for shortcuts and prompt commands.",
+	} {
+		if !strings.Contains(out.String(), expected) {
+			t.Fatalf("expected startup message to contain %q, got %q", expected, out.String())
+		}
+	}
+}
+
 func TestCompletionWordSeparatorPreservesPipeOnAccept(t *testing.T) {
 	b := prompt.NewBuffer()
 	b.InsertText("get pods |gr", false, true)
@@ -299,6 +320,17 @@ func TestKubeconfigStatusLineIncludesSanitizedProxy(t *testing.T) {
 	}
 }
 
+func TestKubeconfigStatusLineWithModePrioritizesMode(t *testing.T) {
+	session := kube.NewSessionState("apps")
+	cfg := cliConfig{kubeconfigStatus: "/tmp/config"}
+
+	got := kubeconfigStatusLineWithMode(cfg, session, "SCROLL line 10/100")
+	want := " kube-prompt | SCROLL line 10/100 | kubeconfig: /tmp/config | namespace: apps | proxy: - "
+	if got != want {
+		t.Fatalf("expected status line %q, got %q", want, got)
+	}
+}
+
 func TestStatusLineWriterAttachAndClose(t *testing.T) {
 	base := &recordingPromptWriter{}
 	writer := newStatusLineWriter(base, " kube-prompt | kubeconfig: /tmp/config ")
@@ -336,6 +368,12 @@ func TestStatusLineWriterAttachAndClose(t *testing.T) {
 	if !strings.Contains(out, "<erase-line>") {
 		t.Fatalf("expected status line cleanup, got %q", out)
 	}
+	if !strings.Contains(out, "<save>") || !strings.Contains(out, "<restore>") {
+		t.Fatalf("expected close to preserve cursor position, got %q", out)
+	}
+	if strings.HasSuffix(out, "<goto:0:0><show-cursor>") {
+		t.Fatalf("expected close not to leave cursor at home, got %q", out)
+	}
 }
 
 func TestStatusLineWriterRendersDynamicText(t *testing.T) {
@@ -357,6 +395,64 @@ func TestStatusLineWriterRendersDynamicText(t *testing.T) {
 	if out := base.String(); !strings.Contains(out, "second") {
 		t.Fatalf("expected refreshed dynamic status text, got %q", out)
 	}
+}
+
+func TestStatusLineParserInterceptsControlS(t *testing.T) {
+	base := &stubConsoleParser{read: []byte{0x13}}
+	called := false
+	parser := newStatusLineParser(base, func() {
+		called = true
+	})
+
+	got, err := parser.Read()
+	if err != nil {
+		t.Fatalf("expected read to succeed, got %v", err)
+	}
+	if !called {
+		t.Fatal("expected Ctrl-S callback to run")
+	}
+	if !bytes.Equal(got, []byte{0x13}) {
+		t.Fatalf("expected Ctrl-S to be returned for prompt redraw, got %#v", got)
+	}
+}
+
+func TestStatusLineParserPassesOtherInput(t *testing.T) {
+	base := &stubConsoleParser{read: []byte("a")}
+	called := false
+	parser := newStatusLineParser(base, func() {
+		called = true
+	})
+
+	got, err := parser.Read()
+	if err != nil {
+		t.Fatalf("expected read to succeed, got %v", err)
+	}
+	if called {
+		t.Fatal("did not expect callback for non Ctrl-S input")
+	}
+	if !bytes.Equal(got, []byte("a")) {
+		t.Fatalf("expected input to pass through, got %#v", got)
+	}
+}
+
+type stubConsoleParser struct {
+	read []byte
+}
+
+func (p *stubConsoleParser) Setup() error {
+	return nil
+}
+
+func (p *stubConsoleParser) TearDown() error {
+	return nil
+}
+
+func (p *stubConsoleParser) GetWinSize() *prompt.WinSize {
+	return &prompt.WinSize{Row: 24, Col: 80}
+}
+
+func (p *stubConsoleParser) Read() ([]byte, error) {
+	return p.read, nil
 }
 
 type recordingPromptWriter struct {

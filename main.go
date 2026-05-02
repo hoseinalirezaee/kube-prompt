@@ -168,14 +168,19 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 	defer c.Close()
 
 	defer debug.Teardown()
+	outputStatus := &outputModeStatus{}
 	statusWriter := newDynamicStatusLineWriter(prompt.NewStdoutWriter(), func() string {
-		return kubeconfigStatusLine(cfg, session)
+		if label := outputStatus.Label(); label != "" {
+			return kubeconfigStatusLineWithMode(cfg, session, label)
+		}
+		return kubeconfigStatusLine(cfg, session) + outputStatus.Suffix()
 	})
 	statusWriter.Attach()
 	defer statusWriter.Close()
+	outputRunner := newManagedOutputRunner(statusWriter, outputStatus)
+	defer outputRunner.Close()
 
-	fmt.Fprintln(stdout, versionString())
-	fmt.Fprintln(stdout, "Please use `exit` or `Ctrl-D` to exit this program.")
+	printStartupMessage(stdout)
 	defer fmt.Fprintln(stdout, "Bye!")
 
 	promptOptions := []prompt.Option{
@@ -186,11 +191,22 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 		prompt.OptionCompletionWordSeparator(completionWordSeparator),
 	}
 	if statusWriter.attached {
-		promptOptions = append(promptOptions, prompt.OptionParser(newStatusLineParser(prompt.NewStandardInputParser())))
+		promptOptions = append(promptOptions, prompt.OptionParser(newStatusLineParser(prompt.NewStandardInputParser(), outputRunner.ShowHistory)))
 	}
 
+	executor := kube.NewExecutorWithRunner(
+		cfg.kubeconfig,
+		cfg.proxyURL,
+		session,
+		outputRunner.Run,
+	)
 	p := prompt.New(
-		kube.NewExecutor(cfg.kubeconfig, cfg.proxyURL, session),
+		func(input string) {
+			if outputRunner.HandlePromptCommand(input) {
+				return
+			}
+			executor(input)
+		},
 		c.Complete,
 		promptOptions...,
 	)
@@ -199,6 +215,10 @@ func runPrompt(ctx context.Context, cfg cliConfig, stdout, stderr io.Writer) int
 }
 
 func kubeconfigStatusLine(cfg cliConfig, session *kube.SessionState) string {
+	return kubeconfigStatusLineWithMode(cfg, session, "")
+}
+
+func kubeconfigStatusLineWithMode(cfg cliConfig, session *kube.SessionState, mode string) string {
 	namespace := session.Namespace()
 	if namespace == "" {
 		namespace = "-"
@@ -207,5 +227,9 @@ func kubeconfigStatusLine(cfg cliConfig, session *kube.SessionState) string {
 	if proxyStatus == "" {
 		proxyStatus = "-"
 	}
-	return " kube-prompt | kubeconfig: " + cfg.kubeconfigStatus + " | namespace: " + namespace + " | proxy: " + proxyStatus + " "
+	status := " kube-prompt"
+	if mode != "" {
+		status += " | " + mode
+	}
+	return status + " | kubeconfig: " + cfg.kubeconfigStatus + " | namespace: " + namespace + " | proxy: " + proxyStatus + " "
 }

@@ -11,17 +11,23 @@ import (
 	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
 )
 
+type CommandRunner func(input string, cmd *exec.Cmd) error
+
 func NewExecutor(kubeconfig, proxyURL string, session *SessionState) func(string) {
+	return NewExecutorWithRunner(kubeconfig, proxyURL, session, directCommandRunner)
+}
+
+func NewExecutorWithRunner(kubeconfig, proxyURL string, session *SessionState, runner CommandRunner) func(string) {
 	return func(s string) {
-		execute(s, kubeconfig, proxyURL, session)
+		execute(s, kubeconfig, proxyURL, session, runner)
 	}
 }
 
 func Executor(s string) {
-	execute(s, "", "", NewSessionState(""))
+	execute(s, "", "", NewSessionState(""), directCommandRunner)
 }
 
-func execute(s, kubeconfig, proxyURL string, session *SessionState) {
+func execute(s, kubeconfig, proxyURL string, session *SessionState, runner CommandRunner) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return
@@ -34,12 +40,19 @@ func execute(s, kubeconfig, proxyURL string, session *SessionState) {
 	}
 
 	cmd := kubectlCommand(s, kubeconfig, session.Namespace(), proxyURL)
+	if runner == nil {
+		runner = directCommandRunner
+	}
+	if err := runner(s, cmd); err != nil {
+		fmt.Printf("Got error: %s\n", err.Error())
+	}
+}
+
+func directCommandRunner(_ string, cmd *exec.Cmd) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("Got error: %s\n", err.Error())
-	}
+	return cmd.Run()
 }
 
 func ExecuteAndGetResult(s string) string {

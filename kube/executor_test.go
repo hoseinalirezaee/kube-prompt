@@ -2,6 +2,7 @@ package kube
 
 import (
 	"bytes"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -163,6 +164,26 @@ func TestRunSessionCommandExit(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out.String()); got != "Bye!" {
 		t.Fatalf("expected bye output, got %q", got)
+	}
+}
+
+func TestNewExecutorWithRunnerUsesCustomRunner(t *testing.T) {
+	session := NewSessionState("apps")
+	var gotInput string
+	var gotCommand string
+	executor := NewExecutorWithRunner("/tmp/kubeconfig", "", session, func(input string, cmd *exec.Cmd) error {
+		gotInput = input
+		gotCommand = strings.Join(cmd.Args, " ")
+		return nil
+	})
+
+	executor("get pods")
+
+	if gotInput != "get pods" {
+		t.Fatalf("expected runner input %q, got %q", "get pods", gotInput)
+	}
+	if !strings.Contains(gotCommand, "kubectl --namespace 'apps' get pods") {
+		t.Fatalf("expected kubectl command with namespace, got %q", gotCommand)
 	}
 }
 

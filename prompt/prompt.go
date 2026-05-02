@@ -311,8 +311,16 @@ func (p *Prompt) readBuffer(bufCh chan []byte, stopCh chan struct{}) {
 		default:
 			if b, err := p.in.Read(); err == nil && !(len(b) == 1 && b[0] == 0) {
 				p.inputBuffer = append(p.inputBuffer, b...)
+				for {
+					prefix, rest, found := splitInputAtEnter(p.inputBuffer)
+					if !found {
+						break
+					}
+					bufCh <- prefix
+					p.inputBuffer = rest
+				}
 				// Try to parse if buffer is likely complete (single byte or known prefix)
-				if len(b) == 1 || len(p.inputBuffer) > 4 {
+				if len(p.inputBuffer) > 0 && (len(b) == 1 || len(p.inputBuffer) > 4) {
 					bufCh <- p.inputBuffer
 					p.inputBuffer = nil
 				}
@@ -320,6 +328,18 @@ func (p *Prompt) readBuffer(bufCh chan []byte, stopCh chan struct{}) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func splitInputAtEnter(input []byte) (prefix []byte, rest []byte, found bool) {
+	for i, b := range input {
+		if b == '\n' || b == '\r' {
+			if b == '\r' && i+1 < len(input) && input[i+1] == '\n' {
+				return input[:i+2], input[i+2:], true
+			}
+			return input[:i+1], input[i+1:], true
+		}
+	}
+	return nil, input, false
 }
 
 func (p *Prompt) setUp() {

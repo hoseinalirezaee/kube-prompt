@@ -129,17 +129,22 @@ func TestSessionCommandCompletion(t *testing.T) {
 	b.InsertText("/", false, true)
 	c := &Completer{}
 
+	assertSuggestionContains(t, c.Complete(*b.Document()), "help", "shortcuts")
 	assertSuggestionContains(t, c.Complete(*b.Document()), "namespace", "active namespace")
+	assertSuggestionContains(t, c.Complete(*b.Document()), "output", "Save captured")
+	assertSuggestionContains(t, c.Complete(*b.Document()), "outputs", "Browse captured")
 	assertSuggestionContains(t, c.Complete(*b.Document()), "exit", "Exit")
 }
 
 func TestSessionCommandCompletionAcceptedAfterSlash(t *testing.T) {
 	tests := []struct {
-		input string
-		want  string
+		input      string
+		suggestion string
+		want       string
 	}{
-		{input: "/", want: "/namespace"},
-		{input: "/n", want: "/namespace"},
+		{input: "/", suggestion: "namespace", want: "/namespace"},
+		{input: "/n", suggestion: "namespace", want: "/namespace"},
+		{input: "/h", suggestion: "help", want: "/help"},
 	}
 
 	for _, tt := range tests {
@@ -148,9 +153,9 @@ func TestSessionCommandCompletionAcceptedAfterSlash(t *testing.T) {
 			b.InsertText(tt.input, false, true)
 			c := &Completer{}
 			suggestions := c.Complete(*b.Document())
-			assertSuggestionContains(t, suggestions, "namespace", "active namespace")
+			assertSuggestionContains(t, suggestions, tt.suggestion, "")
 
-			if got := acceptSuggestionForTest(b, "namespace"); got != tt.want {
+			if got := acceptSuggestionForTest(b, tt.suggestion); got != tt.want {
 				t.Fatalf("expected accepted suggestion to produce %q, got %q", tt.want, got)
 			}
 		})

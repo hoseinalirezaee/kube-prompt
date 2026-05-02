@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"strconv"
 	"strings"
@@ -61,14 +62,41 @@ func (w *statusLineWriter) Close() {
 		return
 	}
 
+	w.clearStatusLinePreservingCursor()
+	w.attached = false
+}
+
+func (w *statusLineWriter) Suspend() {
+	if !w.attached {
+		return
+	}
+	w.clearStatusLinePreservingCursor()
+	w.attached = false
+}
+
+func (w *statusLineWriter) Resume() {
+	if w.attached || !w.refreshSize() {
+		return
+	}
+	w.attached = true
 	w.HideCursor()
+	w.SaveCursor()
+	w.renderStatusLine()
+	w.setScrollRegion()
+	w.UnSaveCursor()
+	w.ShowCursor()
+	_ = w.ConsoleWriter.Flush()
+}
+
+func (w *statusLineWriter) clearStatusLinePreservingCursor() {
+	w.HideCursor()
+	w.SaveCursor()
 	w.ConsoleWriter.WriteRawStr("\x1b[r")
 	w.ConsoleWriter.CursorGoTo(0, 0)
 	w.EraseLine()
-	w.ConsoleWriter.CursorGoTo(0, 0)
+	w.UnSaveCursor()
 	w.ShowCursor()
 	_ = w.ConsoleWriter.Flush()
-	w.attached = false
 }
 
 func (w *statusLineWriter) Flush() error {
@@ -146,10 +174,23 @@ func formatStatusLine(text string, width int) string {
 
 type statusLineParser struct {
 	prompt.ConsoleParser
+	onScroll func()
 }
 
-func newStatusLineParser(parser prompt.ConsoleParser) *statusLineParser {
-	return &statusLineParser{ConsoleParser: parser}
+func newStatusLineParser(parser prompt.ConsoleParser, onScroll func()) *statusLineParser {
+	return &statusLineParser{ConsoleParser: parser, onScroll: onScroll}
+}
+
+func (p *statusLineParser) Read() ([]byte, error) {
+	b, err := p.ConsoleParser.Read()
+	if err != nil {
+		return b, err
+	}
+	if bytes.Equal(b, []byte{0x13}) && p.onScroll != nil {
+		p.onScroll()
+		return b, nil
+	}
+	return b, nil
 }
 
 func (p *statusLineParser) GetWinSize() *prompt.WinSize {
