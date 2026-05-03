@@ -16,6 +16,7 @@ import (
 
 func resetResourceCache() {
 	lastFetchedAt = new(sync.Map)
+	fetchInFlight = new(sync.Map)
 	daemonSetList = new(sync.Map)
 	deploymentList = new(sync.Map)
 	endpointList = new(sync.Map)

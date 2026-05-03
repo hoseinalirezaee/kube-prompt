@@ -405,9 +405,6 @@ func (c *Completer) completeGetPodTargets(ctx context.Context, namespace, word s
 		return []prompt.Suggest{}
 	}
 
-	fetchDeployments(ctx, c.client, namespace)
-	fetchStatefulSets(ctx, c.client, namespace)
-
 	suggestions := make([]prompt.Suggest, 0)
 	suggestions = append(suggestions, addPrefixToSuggestions(getDeploymentSuggestions(ctx, c.client, namespace), "deployment/")...)
 	suggestions = append(suggestions, addPrefixToSuggestions(getStatefulSetSuggestions(ctx, c.client, namespace), "statefulset/")...)

@@ -54,8 +54,11 @@ func (p *Prompt) Run() {
 	p.setUp()
 	defer p.tearDown()
 
+	completionState := newCompletionState(p.completion.completer)
+	defer completionState.Stop()
+
 	if p.completion.showAtStart {
-		p.completion.Update(*p.buf.Document())
+		completionState.Request(*p.buf.Document())
 	}
 
 	p.renderer.Render(p.buf, p.completion)
@@ -79,12 +82,15 @@ func (p *Prompt) Run() {
 	for {
 		select {
 		case b := <-bufCh:
+			before := p.currentDocumentState()
 			if shouldExit, e := p.feed(b); shouldExit {
 				p.renderer.BreakLine(p.buf)
 				stopReadBufCh <- struct{}{}
 				stopHandleSignalCh <- struct{}{}
 				return
 			} else if e != nil {
+				p.completion.Reset()
+				completionState.Invalidate()
 				// Stop goroutine to run readBuffer function
 				stopReadBufCh <- struct{}{}
 				stopHandleSignalCh <- struct{}{}
@@ -93,8 +99,6 @@ func (p *Prompt) Run() {
 				// Reset to Blocking mode because returned EAGAIN when still set non-blocking mode.
 				debug.AssertNoError(p.in.TearDown())
 				p.executor(e.input)
-
-				p.completion.Update(*p.buf.Document())
 
 				p.renderer.Render(p.buf, p.completion)
 
@@ -107,7 +111,14 @@ func (p *Prompt) Run() {
 				go p.readBuffer(bufCh, stopReadBufCh)
 				go p.handleSignals(exitCh, winSizeCh, stopHandleSignalCh)
 			} else {
-				p.completion.Update(*p.buf.Document())
+				if p.shouldRequestCompletion(before) {
+					p.completion.Reset()
+					completionState.Request(*p.buf.Document())
+				}
+				p.renderer.Render(p.buf, p.completion)
+			}
+		case result := <-completionState.Results():
+			if completionState.Apply(p.completion, result) {
 				p.renderer.Render(p.buf, p.completion)
 			}
 		case w := <-winSizeCh:
@@ -263,8 +274,11 @@ func (p *Prompt) Input() string {
 	}
 	p.inputBuffer = nil
 
+	completionState := newCompletionState(p.completion.completer)
+	defer completionState.Stop()
+
 	if p.completion.showAtStart {
-		p.completion.Update(*p.buf.Document())
+		completionState.Request(*p.buf.Document())
 	}
 
 	p.renderer.Render(p.buf, p.completion)
@@ -275,21 +289,59 @@ func (p *Prompt) Input() string {
 	for {
 		select {
 		case b := <-bufCh:
+			before := p.currentDocumentState()
 			if shouldExit, e := p.feed(b); shouldExit {
 				p.renderer.BreakLine(p.buf)
 				stopReadBufCh <- struct{}{}
 				return ""
 			} else if e != nil {
+				p.completion.Reset()
+				completionState.Invalidate()
 				// Stop goroutine to run readBuffer function
 				stopReadBufCh <- struct{}{}
 				return e.input
 			} else {
-				p.completion.Update(*p.buf.Document())
+				if p.shouldRequestCompletion(before) {
+					p.completion.Reset()
+					completionState.Request(*p.buf.Document())
+				}
+				p.renderer.Render(p.buf, p.completion)
+			}
+		case result := <-completionState.Results():
+			if completionState.Apply(p.completion, result) {
 				p.renderer.Render(p.buf, p.completion)
 			}
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}
+	}
+}
+
+type documentState struct {
+	text           string
+	cursorPosition int
+}
+
+func (p *Prompt) currentDocumentState() documentState {
+	doc := p.buf.Document()
+	return documentState{
+		text:           doc.Text,
+		cursorPosition: doc.cursorPosition,
+	}
+}
+
+func (p *Prompt) shouldRequestCompletion(before documentState) bool {
+	if before != p.currentDocumentState() {
+		return true
+	}
+
+	switch p.buf.lastKeyStroke {
+	case Tab, ControlI, BackTab:
+		return len(p.completion.GetSuggestions()) == 0
+	case Down:
+		return p.completionOnDown && len(p.completion.GetSuggestions()) == 0
+	default:
+		return false
 	}
 }
 

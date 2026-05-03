@@ -60,12 +60,18 @@ func (c *CompletionManager) GetSuggestions() []Suggest {
 func (c *CompletionManager) Reset() {
 	c.selected = -1
 	c.verticalScroll = 0
-	c.Update(*NewDocument())
+	c.tmp = nil
 }
 
 // Update to update the suggestions.
 func (c *CompletionManager) Update(in Document) {
-	c.tmp = c.completer(in)
+	c.SetSuggestions(c.completer(in))
+}
+
+// SetSuggestions replaces the current suggestions without invoking the completer.
+func (c *CompletionManager) SetSuggestions(suggestions []Suggest) {
+	c.tmp = suggestions
+	c.update()
 }
 
 // Previous to select the previous suggestion item.

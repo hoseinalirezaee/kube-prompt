@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hoseinalirezaee/kube-prompt/prompt"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -103,6 +104,10 @@ func TestGenericResourceCommandsUseDiscovery(t *testing.T) {
 	c := &Completer{client: client}
 	defer c.Close()
 
+	fetchDiscoveredResources(ctx, client)
+	waitForSuggestionTexts(t, func() []prompt.Suggest {
+		return c.getPodSuggestions(ctx, namespace)
+	}, []string{"web-0"})
 	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"patch", "p"}), "pods", "v1")
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"patch", "po", "web"}), []string{"web-0"})
 	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"label", "p"}), "pods", "v1")
@@ -121,6 +126,9 @@ func TestNodeAndPodSpecificCommands(t *testing.T) {
 	c := &Completer{client: client}
 	defer c.Close()
 	fetchNodeList(ctx, client)
+	waitForSuggestionTexts(t, func() []prompt.Suggest {
+		return c.getPodSuggestions(ctx, namespace)
+	}, []string{"web-0"})
 
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"taint", "nodes", "work"}), []string{"worker-1"})
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"debug", "web"}), []string{"web-0"})
@@ -138,6 +146,11 @@ func TestGetPodsSuggestionsIncludeOwnersBeforePods(t *testing.T) {
 	)
 	c := &Completer{client: client}
 	defer c.Close()
+	fetchDeployments(ctx, client, namespace)
+	fetchStatefulSets(ctx, client, namespace)
+	waitForSuggestionTexts(t, func() []prompt.Suggest {
+		return c.getPodSuggestions(ctx, namespace)
+	}, []string{"web-0"})
 
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"get", "pods", ""}), []string{
 		"deployment/web",

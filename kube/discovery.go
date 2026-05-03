@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
@@ -15,7 +16,7 @@ import (
 
 const discoveryResourcesCacheKey = "discovery_resources"
 
-var discoveredResourceList atomic.Value
+var discoveredResourceList = &atomic.Value{}
 
 type discoveredResource struct {
 	Name         string
@@ -27,14 +28,19 @@ type discoveredResource struct {
 }
 
 func fetchDiscoveredResources(ctx context.Context, client kubernetes.Interface) {
-	if !shouldFetch(discoveryResourcesCacheKey) {
+	fetchDiscoveredResourcesInto(ctx, client, discoveredResourceList, lastFetchedAt, fetchInFlight)
+}
+
+func fetchDiscoveredResourcesInto(ctx context.Context, client kubernetes.Interface, resourceCache *atomic.Value, fetchTimes, inFlight *sync.Map) {
+	fetch, ok := beginFetchFrom(fetchTimes, inFlight, discoveryResourcesCacheKey)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(discoveryResourcesCacheKey)
+	defer fetch.Done()
 
 	select {
 	case <-ctx.Done():
-		discoveredResourceList.Store([]discoveredResource{})
+		resourceCache.Store([]discoveredResource{})
 		return
 	default:
 	}
@@ -43,13 +49,16 @@ func fetchDiscoveredResources(ctx context.Context, client kubernetes.Interface) 
 	if err != nil {
 		debug.Log(err.Error())
 	}
-	discoveredResourceList.Store(toDiscoveredResources(lists))
+	resourceCache.Store(toDiscoveredResources(lists))
 }
 
 func getDiscoveredResources(ctx context.Context, client kubernetes.Interface) []discoveredResource {
-	fetchDiscoveredResources(ctx, client)
+	resourceCache := discoveredResourceList
+	fetchTimes := lastFetchedAt
+	inFlight := fetchInFlight
+	go fetchDiscoveredResourcesInto(ctx, client, resourceCache, fetchTimes, inFlight)
 
-	x := discoveredResourceList.Load()
+	x := resourceCache.Load()
 	resources, ok := x.([]discoveredResource)
 	if !ok {
 		return []discoveredResource{}

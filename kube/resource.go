@@ -22,6 +22,7 @@ const thresholdFetchInterval = 10 * time.Second
 
 func init() {
 	lastFetchedAt = new(sync.Map)
+	fetchInFlight = new(sync.Map)
 	endpointList = new(sync.Map)
 	deploymentList = new(sync.Map)
 	daemonSetList = new(sync.Map)
@@ -44,10 +45,15 @@ func init() {
 
 var (
 	lastFetchedAt *sync.Map
+	fetchInFlight *sync.Map
 )
 
 func shouldFetch(key string) bool {
-	v, ok := lastFetchedAt.Load(key)
+	return shouldFetchFrom(lastFetchedAt, key)
+}
+
+func shouldFetchFrom(fetchTimes *sync.Map, key string) bool {
+	v, ok := fetchTimes.Load(key)
 	if !ok {
 		return true
 	}
@@ -58,8 +64,33 @@ func shouldFetch(key string) bool {
 	return time.Since(t) > thresholdFetchInterval
 }
 
-func updateLastFetchedAt(key string) {
-	lastFetchedAt.Store(key, time.Now())
+type fetchAttempt struct {
+	key           string
+	lastFetchedAt *sync.Map
+	inFlight      *sync.Map
+}
+
+func beginFetch(key string) (*fetchAttempt, bool) {
+	return beginFetchFrom(lastFetchedAt, fetchInFlight, key)
+}
+
+func beginFetchFrom(fetchTimes, inFlight *sync.Map, key string) (*fetchAttempt, bool) {
+	if !shouldFetchFrom(fetchTimes, key) {
+		return nil, false
+	}
+	if _, loaded := inFlight.LoadOrStore(key, struct{}{}); loaded {
+		return nil, false
+	}
+	return &fetchAttempt{
+		key:           key,
+		lastFetchedAt: fetchTimes,
+		inFlight:      inFlight,
+	}, true
+}
+
+func (f *fetchAttempt) Done() {
+	f.lastFetchedAt.Store(f.key, time.Now())
+	f.inFlight.Delete(f.key)
 }
 
 /* Component Status */
@@ -70,12 +101,13 @@ var (
 
 func fetchComponentStatusList(ctx context.Context, client kubernetes.Interface) {
 	key := "component_status"
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
+	defer fetch.Done()
 	l, _ := client.CoreV1().ComponentStatuses().List(ctx, metav1.ListOptions{})
 	componentStatusList.Store(l)
-	updateLastFetchedAt(key)
 }
 
 func getComponentStatusCompletions(ctx context.Context, client kubernetes.Interface) []prompt.Suggest {
@@ -101,10 +133,11 @@ var (
 
 func fetchConfigMapList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "config_map_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 	l, _ := client.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
 	configMapsList.Store(l)
 }
@@ -132,10 +165,11 @@ var (
 
 func fetchContextList(kubeconfig string) {
 	key := "context:" + kubeconfig
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 	r := ExecuteAndGetResultWithKubeconfig("config get-contexts --no-headers -o name", kubeconfig)
 	r = strings.TrimRight(r, "\n")
 	contextList.Store(kubeconfig, strings.Split(r, "\n"))
@@ -168,10 +202,11 @@ var (
 
 func fetchDaemonSetList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "daemon_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
 	daemonSetList.Store(namespace, l)
@@ -205,10 +240,11 @@ var (
 
 func fetchDeployments(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "deployment_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
 	deploymentList.Store(namespace, l)
@@ -216,7 +252,9 @@ func fetchDeployments(ctx context.Context, client kubernetes.Interface, namespac
 }
 
 func getDeploymentSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
-	go fetchDeployments(ctx, client, namespace)
+	if shouldFetch("deployment_" + namespace) {
+		go fetchDeployments(ctx, client, namespace)
+	}
 	x, ok := deploymentList.Load(namespace)
 	if !ok {
 		return []prompt.Suggest{}
@@ -242,17 +280,20 @@ var (
 
 func fetchStatefulSets(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "stateful_set_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
 	statefulSetList.Store(namespace, l)
 }
 
 func getStatefulSetSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
-	go fetchStatefulSets(ctx, client, namespace)
+	if shouldFetch("stateful_set_" + namespace) {
+		go fetchStatefulSets(ctx, client, namespace)
+	}
 	x, ok := statefulSetList.Load(namespace)
 	if !ok {
 		return []prompt.Suggest{}
@@ -364,10 +405,11 @@ var (
 
 func fetchEndpoints(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "endpoint_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().Endpoints(namespace).List(ctx, metav1.ListOptions{})
 	endpointList.Store(namespace, l)
@@ -401,10 +443,11 @@ var (
 
 func fetchEvents(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "event_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{})
 	eventList.Store(namespace, l)
@@ -438,10 +481,11 @@ var (
 
 func fetchNodeList(ctx context.Context, client kubernetes.Interface) {
 	key := "node"
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	nodeList.Store(l)
@@ -471,10 +515,11 @@ var (
 
 func fetchSecretList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "secret_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
 	secretList.Store(namespace, l)
@@ -508,10 +553,11 @@ var (
 
 func fetchIngresses(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "ingress_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.NetworkingV1().Ingresses(namespace).List(ctx, metav1.ListOptions{})
 	ingressList.Store(namespace, l)
@@ -549,10 +595,11 @@ var (
 
 func fetchLimitRangeList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "limit_range_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().LimitRanges(namespace).List(ctx, metav1.ListOptions{})
 	limitRangeList.Store(namespace, l)
@@ -601,10 +648,11 @@ var (
 
 func fetchPersistentVolumeClaimsList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "persistent_volume_claims" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{})
 	persistentVolumeClaimsList.Store(namespace, l)
@@ -638,10 +686,11 @@ var (
 
 func fetchPersistentVolumeList(ctx context.Context, client kubernetes.Interface) {
 	key := "persistent_volume"
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
 	persistentVolumesList.Store(l)
@@ -671,10 +720,11 @@ var (
 
 func fetchPodTemplateList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "pod_template_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().PodTemplates(namespace).List(ctx, metav1.ListOptions{})
 	podTemplateList.Store(namespace, l)
@@ -708,10 +758,11 @@ var (
 
 func fetchReplicaSetList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "replica_set_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{})
 	replicaSetList.Store(namespace, l)
@@ -745,10 +796,11 @@ var (
 
 func fetchReplicationControllerList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "replication_controller" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().ReplicationControllers(namespace).List(ctx, metav1.ListOptions{})
 	replicationControllerList.Store(namespace, l)
@@ -782,10 +834,11 @@ var (
 
 func fetchResourceQuotaList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "resource_quota" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().ResourceQuotas(namespace).List(ctx, metav1.ListOptions{})
 	resourceQuotaList.Store(namespace, l)
@@ -819,10 +872,11 @@ var (
 
 func fetchServiceAccountList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "service_account_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{})
 	serviceAccountList.Store(namespace, l)
@@ -856,10 +910,11 @@ var (
 
 func fetchServiceList(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "service_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
 	serviceList.Store(namespace, l)
@@ -893,10 +948,11 @@ var (
 
 func fetchJobs(ctx context.Context, client kubernetes.Interface, namespace string) {
 	key := "job_" + namespace
-	if !shouldFetch(key) {
+	fetch, ok := beginFetch(key)
+	if !ok {
 		return
 	}
-	updateLastFetchedAt(key)
+	defer fetch.Done()
 
 	l, _ := client.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
 	jobList.Store(namespace, l)

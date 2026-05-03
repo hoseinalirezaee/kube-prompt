@@ -81,7 +81,7 @@ func (p *podWatchCache) watcher(namespace string) *podNamespaceWatcher {
 	p.mu.Unlock()
 
 	if !ok {
-		p.waitForInitialSync(namespace, watcher)
+		go p.waitForInitialSync(namespace, watcher)
 	}
 	return watcher
 }
