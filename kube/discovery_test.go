@@ -191,6 +191,36 @@ func TestDiscoveredBuiltInResourceNameCompletionRequiresDiscovery(t *testing.T) 
 	assertSuggestionTexts(t, suggestions, []string{"web"})
 }
 
+func TestDiscoveredStatefulSetNameCompletionUsesGenericResourceSuggestions(t *testing.T) {
+	resetDiscoveryCache()
+	resetResourceCache()
+	ctx := context.Background()
+	namespace := "default"
+	client := fake.NewSimpleClientset(&appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: namespace},
+	})
+	client.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "apps/v1",
+			APIResources: []metav1.APIResource{
+				{
+					Name:         "statefulsets",
+					SingularName: "statefulset",
+					ShortNames:   []string{"sts"},
+					Namespaced:   true,
+					Verbs:        metav1.Verbs{"get", "list"},
+				},
+			},
+		},
+	}
+	c := &Completer{client: client}
+
+	fetchStatefulSets(ctx, client, namespace)
+	suggestions := c.argumentsCompleter(ctx, namespace, []string{"get", "sts", "d"})
+
+	assertSuggestionTexts(t, suggestions, []string{"db"})
+}
+
 func assertSuggestionContains(t *testing.T, suggestions []prompt.Suggest, text string, descriptionParts ...string) {
 	t.Helper()
 

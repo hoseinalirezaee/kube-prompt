@@ -17,10 +17,12 @@ import (
 func resetResourceCache() {
 	lastFetchedAt = new(sync.Map)
 	daemonSetList = new(sync.Map)
+	deploymentList = new(sync.Map)
 	endpointList = new(sync.Map)
 	ingressList = new(sync.Map)
 	limitRangeList = new(sync.Map)
 	replicaSetList = new(sync.Map)
+	statefulSetList = new(sync.Map)
 }
 
 func assertSuggestionTexts(t *testing.T, suggestions []prompt.Suggest, expected []string) {
@@ -64,6 +66,20 @@ func TestGetEndpointsSuggestions(t *testing.T) {
 	assertSuggestionTexts(t, suggestions, []string{"api"})
 }
 
+func TestGetDeploymentSuggestions(t *testing.T) {
+	resetResourceCache()
+	ctx := context.Background()
+	namespace := "default"
+	client := fake.NewSimpleClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: namespace},
+	})
+
+	fetchDeployments(ctx, client, namespace)
+	suggestions := getDeploymentSuggestions(ctx, client, namespace)
+
+	assertSuggestionTexts(t, suggestions, []string{"web"})
+}
+
 func TestGetIngressSuggestions(t *testing.T) {
 	resetResourceCache()
 	ctx := context.Background()
@@ -104,4 +120,18 @@ func TestGetReplicaSetSuggestions(t *testing.T) {
 	suggestions := getReplicaSetSuggestions(ctx, client, namespace)
 
 	assertSuggestionTexts(t, suggestions, []string{"web-7d8c9"})
+}
+
+func TestGetStatefulSetSuggestions(t *testing.T) {
+	resetResourceCache()
+	ctx := context.Background()
+	namespace := "default"
+	client := fake.NewSimpleClientset(&appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: namespace},
+	})
+
+	fetchStatefulSets(ctx, client, namespace)
+	suggestions := getStatefulSetSuggestions(ctx, client, namespace)
+
+	assertSuggestionTexts(t, suggestions, []string{"db"})
 }

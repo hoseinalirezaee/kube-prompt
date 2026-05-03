@@ -2,9 +2,15 @@ package kube
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
+
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestKubectlCommandSetsKubeconfigEnv(t *testing.T) {
@@ -185,6 +191,93 @@ func TestNewExecutorWithRunnerUsesCustomRunner(t *testing.T) {
 	if !strings.Contains(gotCommand, "kubectl --namespace 'apps' get pods") {
 		t.Fatalf("expected kubectl command with namespace, got %q", gotCommand)
 	}
+}
+
+func TestRewritePodOwnerShortcutDeployment(t *testing.T) {
+	setFakeKubernetesClientFactory(t, fake.NewSimpleClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "apps"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "web"},
+			},
+		},
+	}))
+
+	got, err := rewritePodOwnerShortcut(context.Background(), "get pods deployment/web", "/tmp/kubeconfig", "", "apps")
+	if err != nil {
+		t.Fatalf("expected rewrite to succeed, got %v", err)
+	}
+	if want := "get pods -l app=web"; got != want {
+		t.Fatalf("expected rewritten command %q, got %q", want, got)
+	}
+}
+
+func TestRewritePodOwnerShortcutRejectsMissingNamespace(t *testing.T) {
+	setFakeKubernetesClientFactory(t, fake.NewSimpleClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "kwok-demo"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "web"},
+			},
+		},
+	}))
+
+	_, err := rewritePodOwnerShortcut(context.Background(), "get pods deployment/web", "/tmp/kubeconfig", "", "")
+	if err == nil || !strings.Contains(err.Error(), "require a namespace") {
+		t.Fatalf("expected missing namespace error, got %v", err)
+	}
+}
+
+func TestRewritePodOwnerShortcutStatefulSetPreservesPipeAndNamespace(t *testing.T) {
+	setFakeKubernetesClientFactory(t, fake.NewSimpleClientset(&appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "data"},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "db"},
+			},
+		},
+	}))
+
+	got, err := rewritePodOwnerShortcut(context.Background(), "get pods statefulset/db -n data | grep db", "/tmp/kubeconfig", "", "apps")
+	if err != nil {
+		t.Fatalf("expected rewrite to succeed, got %v", err)
+	}
+	if want := "get pods -l app=db -n data | grep db"; got != want {
+		t.Fatalf("expected rewritten command %q, got %q", want, got)
+	}
+}
+
+func TestRewritePodOwnerShortcutRejectsSelectorAndAllNamespaces(t *testing.T) {
+	if _, err := rewritePodOwnerShortcut(context.Background(), "get pods deployment/web -l app=web", "", "", "apps"); err == nil || !strings.Contains(err.Error(), "--selector") {
+		t.Fatalf("expected selector conflict error, got %v", err)
+	}
+	if _, err := rewritePodOwnerShortcut(context.Background(), "get pods deployment/web -A", "", "", "apps"); err == nil || !strings.Contains(err.Error(), "--all-namespaces") {
+		t.Fatalf("expected all-namespaces error, got %v", err)
+	}
+	if _, err := rewritePodOwnerShortcut(context.Background(), "get pods deployment/web pod-a", "", "", "apps"); err == nil || !strings.Contains(err.Error(), "additional resource names") {
+		t.Fatalf("expected additional resource names error, got %v", err)
+	}
+}
+
+func TestRewritePodOwnerShortcutRejectsUnknownOwner(t *testing.T) {
+	setFakeKubernetesClientFactory(t, fake.NewSimpleClientset())
+
+	_, err := rewritePodOwnerShortcut(context.Background(), "get pods deployment/missing", "/tmp/kubeconfig", "", "apps")
+	if err == nil || !strings.Contains(err.Error(), "cannot resolve deployment/missing") {
+		t.Fatalf("expected missing owner error, got %v", err)
+	}
+}
+
+func setFakeKubernetesClientFactory(t *testing.T, client kubernetes.Interface) {
+	t.Helper()
+
+	previous := kubernetesClientFactory
+	kubernetesClientFactory = func(kubeconfig, proxyURL string) (kubernetes.Interface, error) {
+		return client, nil
+	}
+	t.Cleanup(func() {
+		kubernetesClientFactory = previous
+	})
 }
 
 func hasEnv(env []string, want string) bool {

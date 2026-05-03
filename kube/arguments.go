@@ -141,6 +141,9 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 
 		third := args[2]
 		if len(args) == 3 {
+			if c.isPodResourceType(ctx, "get", second) {
+				return c.completeGetPodTargets(ctx, namespace, third)
+			}
 			return c.completeResourceName(ctx, namespace, "get", second, third)
 		}
 	case "describe":
@@ -383,6 +386,35 @@ func (c *Completer) completeTypeThenNameWithOffset(ctx context.Context, namespac
 	return []prompt.Suggest{}
 }
 
+func (c *Completer) isPodResourceType(ctx context.Context, command, resourceType string) bool {
+	resource, ok := resolveDiscoveredResource(ctx, c.client, command, resourceType)
+	if ok {
+		return resource.Name == "pods"
+	}
+
+	switch resourceType {
+	case "po", "pod", "pods":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Completer) completeGetPodTargets(ctx context.Context, namespace, word string) []prompt.Suggest {
+	if namespace == "" {
+		return []prompt.Suggest{}
+	}
+
+	fetchDeployments(ctx, c.client, namespace)
+	fetchStatefulSets(ctx, c.client, namespace)
+
+	suggestions := make([]prompt.Suggest, 0)
+	suggestions = append(suggestions, addPrefixToSuggestions(getDeploymentSuggestions(ctx, c.client, namespace), "deployment/")...)
+	suggestions = append(suggestions, addPrefixToSuggestions(getStatefulSetSuggestions(ctx, c.client, namespace), "statefulset/")...)
+	suggestions = append(suggestions, c.getPodSuggestions(ctx, namespace)...)
+	return prompt.FilterContains(suggestions, word, true)
+}
+
 func addPrefixToSuggestions(suggestions []prompt.Suggest, prefix string) []prompt.Suggest {
 	prefixed := make([]prompt.Suggest, len(suggestions))
 	for i := range suggestions {
@@ -441,6 +473,8 @@ func (c *Completer) getResourceNameSuggestions(ctx context.Context, namespace, c
 		return getServiceSuggestions(ctx, c.client, namespace)
 	case "jobs":
 		return getJobSuggestions(ctx, c.client, namespace)
+	case "statefulsets":
+		return getStatefulSetSuggestions(ctx, c.client, namespace)
 	default:
 		return []prompt.Suggest{}
 	}

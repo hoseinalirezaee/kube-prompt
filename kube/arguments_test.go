@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -124,4 +125,43 @@ func TestNodeAndPodSpecificCommands(t *testing.T) {
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"taint", "nodes", "work"}), []string{"worker-1"})
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"debug", "web"}), []string{"web-0"})
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"cp", "web"}), []string{"web-0"})
+}
+
+func TestGetPodsSuggestionsIncludeOwnersBeforePods(t *testing.T) {
+	resetResourceCache()
+	ctx := context.Background()
+	namespace := "default"
+	client := fake.NewSimpleClientset(
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: namespace}},
+		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: namespace}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-0", Namespace: namespace}},
+	)
+	c := &Completer{client: client}
+	defer c.Close()
+
+	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"get", "pods", ""}), []string{
+		"deployment/web",
+		"statefulset/db",
+		"web-0",
+	})
+	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"get", "po", "dep"}), []string{
+		"deployment/web",
+	})
+	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"get", "po", "state"}), []string{
+		"statefulset/db",
+	})
+}
+
+func TestGetPodsSuggestionsRequireNamespaceForOwnerShortcuts(t *testing.T) {
+	resetResourceCache()
+	ctx := context.Background()
+	client := fake.NewSimpleClientset(
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "kwok-demo"}},
+		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "kwok-demo"}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-0", Namespace: "kwok-demo"}},
+	)
+	c := &Completer{client: client}
+	defer c.Close()
+
+	assertSuggestionTexts(t, c.argumentsCompleter(ctx, "", []string{"get", "pods", ""}), []string{})
 }

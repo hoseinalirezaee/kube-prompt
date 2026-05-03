@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +25,7 @@ func init() {
 	endpointList = new(sync.Map)
 	deploymentList = new(sync.Map)
 	daemonSetList = new(sync.Map)
+	statefulSetList = new(sync.Map)
 	eventList = new(sync.Map)
 	secretList = new(sync.Map)
 	ingressList = new(sync.Map)
@@ -230,6 +232,128 @@ func getDeploymentSuggestions(ctx context.Context, client kubernetes.Interface, 
 		}
 	}
 	return s
+}
+
+/* StatefulSet */
+
+var (
+	statefulSetList *sync.Map
+)
+
+func fetchStatefulSets(ctx context.Context, client kubernetes.Interface, namespace string) {
+	key := "stateful_set_" + namespace
+	if !shouldFetch(key) {
+		return
+	}
+	updateLastFetchedAt(key)
+
+	l, _ := client.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+	statefulSetList.Store(namespace, l)
+}
+
+func getStatefulSetSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
+	go fetchStatefulSets(ctx, client, namespace)
+	x, ok := statefulSetList.Load(namespace)
+	if !ok {
+		return []prompt.Suggest{}
+	}
+	l, ok := x.(*appsv1.StatefulSetList)
+	if !ok || len(l.Items) == 0 {
+		return []prompt.Suggest{}
+	}
+	s := make([]prompt.Suggest, len(l.Items))
+	for i := range l.Items {
+		s[i] = prompt.Suggest{
+			Text: l.Items[i].Name,
+		}
+	}
+	return s
+}
+
+type podOwnerSelector struct {
+	Kind      string
+	Name      string
+	Namespace string
+	Selector  string
+}
+
+func parsePodOwnerToken(text string) (kind, name string, ok bool) {
+	kind, name, found := strings.Cut(text, "/")
+	if !found || strings.TrimSpace(name) == "" {
+		return "", "", false
+	}
+
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "deployment":
+		return "deployment", strings.TrimSpace(name), true
+	case "statefulset":
+		return "statefulset", strings.TrimSpace(name), true
+	default:
+		return "", "", false
+	}
+}
+
+func resolvePodOwnerSelector(ctx context.Context, client kubernetes.Interface, namespace, token string) (podOwnerSelector, error) {
+	kind, name, ok := parsePodOwnerToken(token)
+	if !ok {
+		return podOwnerSelector{}, fmt.Errorf("unsupported pod owner %q", token)
+	}
+
+	switch kind {
+	case "deployment":
+		return resolveDeploymentSelector(ctx, client, namespace, kind, name)
+	case "statefulset":
+		return resolveStatefulSetSelector(ctx, client, namespace, kind, name)
+	default:
+		return podOwnerSelector{}, fmt.Errorf("unsupported pod owner %q", token)
+	}
+}
+
+func resolveDeploymentSelector(ctx context.Context, client kubernetes.Interface, namespace, kind, name string) (podOwnerSelector, error) {
+	if namespace == "" {
+		return podOwnerSelector{}, fmt.Errorf("cannot resolve %s/%s: namespace is required, use /namespace or --namespace", kind, name)
+	}
+
+	deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return podOwnerSelector{}, fmt.Errorf("cannot resolve %s/%s: %w", kind, name, err)
+	}
+	selector, err := labelSelectorString(deployment.Spec.Selector)
+	if err != nil {
+		return podOwnerSelector{}, fmt.Errorf("cannot resolve %s/%s: %w", kind, name, err)
+	}
+	return podOwnerSelector{Kind: kind, Name: name, Namespace: deployment.Namespace, Selector: selector}, nil
+}
+
+func resolveStatefulSetSelector(ctx context.Context, client kubernetes.Interface, namespace, kind, name string) (podOwnerSelector, error) {
+	if namespace == "" {
+		return podOwnerSelector{}, fmt.Errorf("cannot resolve %s/%s: namespace is required, use /namespace or --namespace", kind, name)
+	}
+
+	statefulSet, err := client.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return podOwnerSelector{}, fmt.Errorf("cannot resolve %s/%s: %w", kind, name, err)
+	}
+	selector, err := labelSelectorString(statefulSet.Spec.Selector)
+	if err != nil {
+		return podOwnerSelector{}, fmt.Errorf("cannot resolve %s/%s: %w", kind, name, err)
+	}
+	return podOwnerSelector{Kind: kind, Name: name, Namespace: statefulSet.Namespace, Selector: selector}, nil
+}
+
+func labelSelectorString(selector *metav1.LabelSelector) (string, error) {
+	if selector == nil {
+		return "", fmt.Errorf("resource has no pod selector")
+	}
+
+	resolved, err := metav1.LabelSelectorAsSelector(selector)
+	if err != nil {
+		return "", fmt.Errorf("invalid pod selector: %w", err)
+	}
+	if resolved.Empty() {
+		return "", fmt.Errorf("resource has an empty pod selector")
+	}
+	return resolved.String(), nil
 }
 
 /* Endpoint */

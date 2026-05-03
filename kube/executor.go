@@ -2,6 +2,7 @@ package kube
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,9 +10,12 @@ import (
 	"strings"
 
 	"github.com/hoseinalirezaee/kube-prompt/internal/debug"
+	"k8s.io/client-go/kubernetes"
 )
 
 type CommandRunner func(input string, cmd *exec.Cmd) error
+
+var kubernetesClientFactory = newKubernetesClient
 
 func NewExecutor(kubeconfig, proxyURL string, session *SessionState) func(string) {
 	return NewExecutorWithRunner(kubeconfig, proxyURL, session, directCommandRunner)
@@ -39,7 +43,13 @@ func execute(s, kubeconfig, proxyURL string, session *SessionState, runner Comma
 		return
 	}
 
-	cmd := kubectlCommand(s, kubeconfig, session.Namespace(), proxyURL)
+	rewritten, err := rewritePodOwnerShortcut(context.Background(), s, kubeconfig, proxyURL, session.Namespace())
+	if err != nil {
+		fmt.Printf("Got error: %s\n", err.Error())
+		return
+	}
+
+	cmd := kubectlCommand(rewritten, kubeconfig, session.Namespace(), proxyURL)
 	if runner == nil {
 		runner = directCommandRunner
 	}
@@ -125,6 +135,131 @@ func kubectlCommand(s, kubeconfig, namespace, proxyURL string) *exec.Cmd {
 		cmd.Env = kubectlEnv(os.Environ(), kubeconfig, proxyURL)
 	}
 	return cmd
+}
+
+func rewritePodOwnerShortcut(ctx context.Context, input, kubeconfig, proxyURL, namespace string) (string, error) {
+	beforePipe, afterPipe := splitCommandBeforePipe(input)
+	fields := strings.Fields(beforePipe)
+	if len(fields) < 3 || fields[0] != "get" || !isPodResourceToken(fields[1]) {
+		return input, nil
+	}
+
+	ownerIndex := -1
+	for i := 2; i < len(fields); i++ {
+		if _, _, ok := parsePodOwnerToken(fields[i]); !ok {
+			continue
+		}
+		if ownerIndex != -1 {
+			return "", fmt.Errorf("only one pod owner shortcut is supported per command")
+		}
+		ownerIndex = i
+	}
+	if ownerIndex == -1 {
+		return input, nil
+	}
+	if hasSelectorFlag(fields) {
+		return "", fmt.Errorf("pod owner shortcuts cannot be combined with --selector or -l")
+	}
+	filteredArgs, _ := excludeOptions(fields)
+	if len(filteredArgs) != 3 || filteredArgs[2] != fields[ownerIndex] {
+		return "", fmt.Errorf("pod owner shortcuts cannot be combined with additional resource names")
+	}
+
+	resolvedNamespace, allNamespaces := commandNamespace(fields, namespace)
+	if allNamespaces {
+		return "", fmt.Errorf("pod owner shortcuts do not support --all-namespaces")
+	}
+	if resolvedNamespace == "" {
+		return "", fmt.Errorf("pod owner shortcuts require a namespace, use /namespace or --namespace")
+	}
+
+	client, err := kubernetesClientFactory(kubeconfig, proxyURL)
+	if err != nil {
+		return "", err
+	}
+	owner, err := resolvePodOwnerSelector(ctx, client, resolvedNamespace, fields[ownerIndex])
+	if err != nil {
+		return "", err
+	}
+
+	rewrittenFields := make([]string, 0, len(fields)+1)
+	rewrittenFields = append(rewrittenFields, fields[:ownerIndex]...)
+	rewrittenFields = append(rewrittenFields, "-l", owner.Selector)
+	rewrittenFields = append(rewrittenFields, fields[ownerIndex+1:]...)
+
+	rewritten := strings.Join(rewrittenFields, " ")
+	if afterPipe == "" {
+		return rewritten, nil
+	}
+	return rewritten + " " + strings.TrimLeft(afterPipe, " "), nil
+}
+
+func splitCommandBeforePipe(input string) (beforePipe, afterPipe string) {
+	pipe := strings.Index(input, "|")
+	if pipe < 0 {
+		return input, ""
+	}
+	return strings.TrimSpace(input[:pipe]), input[pipe:]
+}
+
+func isPodResourceToken(token string) bool {
+	switch token {
+	case "po", "pod", "pods":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasSelectorFlag(fields []string) bool {
+	for i := range fields {
+		field := fields[i]
+		switch {
+		case field == "-l" || field == "--selector":
+			return true
+		case strings.HasPrefix(field, "-l="):
+			return true
+		case strings.HasPrefix(field, "--selector="):
+			return true
+		}
+	}
+	return false
+}
+
+func commandNamespace(fields []string, fallback string) (string, bool) {
+	namespace := strings.TrimSpace(fallback)
+
+	for i := 0; i < len(fields); i++ {
+		field := fields[i]
+		switch {
+		case field == "--namespace" || field == "-n":
+			if i+1 < len(fields) {
+				return fields[i+1], false
+			}
+		case field == "--all-namespaces" || field == "-A":
+			return "", true
+		case strings.HasPrefix(field, "--namespace="):
+			return strings.TrimPrefix(field, "--namespace="), false
+		case strings.HasPrefix(field, "--all-namespaces="):
+			value := strings.TrimPrefix(field, "--all-namespaces=")
+			if value == "" || strings.EqualFold(value, "true") {
+				return "", true
+			}
+		case strings.HasPrefix(field, "-n="):
+			return strings.TrimPrefix(field, "-n="), false
+		case strings.HasPrefix(field, "-n") && len(field) > len("-n"):
+			return strings.TrimPrefix(field, "-n"), false
+		}
+	}
+	return namespace, false
+}
+
+func newKubernetesClient(kubeconfig, proxyURL string) (kubernetes.Interface, error) {
+	config, err := newRESTConfig(kubeconfig, proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(config)
 }
 
 func kubectlEnv(base []string, kubeconfig, proxyURL string) []string {
