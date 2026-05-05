@@ -39,6 +39,7 @@ func init() {
 	serviceAccountList = new(sync.Map)
 	serviceList = new(sync.Map)
 	jobList = new(sync.Map)
+	genericResourceNameList = new(sync.Map)
 }
 
 /* LastFetchedAt */

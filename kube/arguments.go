@@ -127,6 +127,10 @@ var (
 )
 
 func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, args []string) []prompt.Suggest {
+	return c.argumentsCompleterWithScope(ctx, namespace, false, args)
+}
+
+func (c *Completer) argumentsCompleterWithScope(ctx context.Context, namespace string, allNamespaces bool, args []string) []prompt.Suggest {
 	if len(args) <= 1 {
 		return prompt.FilterHasPrefix(commands, args[0], true)
 	}
@@ -144,7 +148,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 			if c.isPodResourceType(ctx, "get", second) {
 				return c.completeGetPodTargets(ctx, namespace, third)
 			}
-			return c.completeResourceName(ctx, namespace, "get", second, third)
+			return c.completeResourceName(ctx, namespace, allNamespaces, "get", second, third)
 		}
 	case "describe":
 		second := args[1]
@@ -154,7 +158,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 
 		third := args[2]
 		if len(args) == 3 {
-			return c.completeResourceName(ctx, namespace, "describe", second, third)
+			return c.completeResourceName(ctx, namespace, allNamespaces, "describe", second, third)
 		}
 	case "create":
 		if len(args) == 2 {
@@ -176,7 +180,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 
 		third := args[2]
 		if len(args) == 3 {
-			return c.completeResourceName(ctx, namespace, "delete", second, third)
+			return c.completeResourceName(ctx, namespace, allNamespaces, "delete", second, third)
 		}
 	case "edit":
 		if len(args) == 2 {
@@ -184,19 +188,19 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 		}
 
 		if len(args) == 3 {
-			return c.completeResourceName(ctx, namespace, "edit", args[1], args[2])
+			return c.completeResourceName(ctx, namespace, allNamespaces, "edit", args[1], args[2])
 		}
 
 	case "patch", "label", "annotate":
-		return c.completeTypeThenName(ctx, namespace, "patch", args)
+		return c.completeTypeThenName(ctx, namespace, allNamespaces, "patch", args)
 	case "autoscale", "expose", "wait":
-		return c.completeTypeThenName(ctx, namespace, "get", args)
+		return c.completeTypeThenName(ctx, namespace, allNamespaces, "get", args)
 	case "set":
 		if len(args) == 2 {
 			return prompt.FilterHasPrefix(setSubcommands, args[1], true)
 		}
 		if len(args) >= 3 {
-			return c.completeTypeThenNameWithOffset(ctx, namespace, "patch", args, 2)
+			return c.completeTypeThenNameWithOffset(ctx, namespace, allNamespaces, "patch", args, 2)
 		}
 	case "auth":
 		if len(args) == 2 {
@@ -240,7 +244,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 			return prompt.FilterContains(r, args[1], true)
 		}
 		if len(args) == 3 {
-			return c.completeResourceName(ctx, namespace, "get", args[1], args[2])
+			return c.completeResourceName(ctx, namespace, allNamespaces, "get", args[1], args[2])
 		}
 	case "cordon":
 		fallthrough
@@ -287,7 +291,7 @@ func (c *Completer) argumentsCompleter(ctx context.Context, namespace string, ar
 			return prompt.FilterHasPrefix(rolloutSubcommands, args[1], true)
 		}
 		if len(args) >= 3 {
-			return c.completeTypeThenNameWithOffset(ctx, namespace, "rollout", args, 2)
+			return c.completeTypeThenNameWithOffset(ctx, namespace, allNamespaces, "rollout", args, 2)
 		}
 	case "config":
 		subCommands := []prompt.Suggest{
@@ -364,24 +368,24 @@ func (c *Completer) completeResourceType(ctx context.Context, command, word stri
 	)
 }
 
-func (c *Completer) completeResourceName(ctx context.Context, namespace, command, resourceType, word string) []prompt.Suggest {
+func (c *Completer) completeResourceName(ctx context.Context, namespace string, allNamespaces bool, command, resourceType, word string) []prompt.Suggest {
 	return prompt.FilterContains(
-		c.getResourceNameSuggestions(ctx, namespace, command, resourceType),
+		c.getResourceNameSuggestions(ctx, namespace, allNamespaces, command, resourceType),
 		word,
 		true,
 	)
 }
 
-func (c *Completer) completeTypeThenName(ctx context.Context, namespace, command string, args []string) []prompt.Suggest {
-	return c.completeTypeThenNameWithOffset(ctx, namespace, command, args, 1)
+func (c *Completer) completeTypeThenName(ctx context.Context, namespace string, allNamespaces bool, command string, args []string) []prompt.Suggest {
+	return c.completeTypeThenNameWithOffset(ctx, namespace, allNamespaces, command, args, 1)
 }
 
-func (c *Completer) completeTypeThenNameWithOffset(ctx context.Context, namespace, command string, args []string, offset int) []prompt.Suggest {
+func (c *Completer) completeTypeThenNameWithOffset(ctx context.Context, namespace string, allNamespaces bool, command string, args []string, offset int) []prompt.Suggest {
 	if len(args) == offset+1 {
 		return c.completeResourceType(ctx, command, args[offset])
 	}
 	if len(args) == offset+2 {
-		return c.completeResourceName(ctx, namespace, command, args[offset], args[offset+1])
+		return c.completeResourceName(ctx, namespace, allNamespaces, command, args[offset], args[offset+1])
 	}
 	return []prompt.Suggest{}
 }
@@ -421,7 +425,7 @@ func addPrefixToSuggestions(suggestions []prompt.Suggest, prefix string) []promp
 	return prefixed
 }
 
-func (c *Completer) getResourceNameSuggestions(ctx context.Context, namespace, command, resourceType string) []prompt.Suggest {
+func (c *Completer) getResourceNameSuggestions(ctx context.Context, namespace string, allNamespaces bool, command, resourceType string) []prompt.Suggest {
 	resource, ok := resolveDiscoveredResource(ctx, c.client, command, resourceType)
 	if !ok {
 		return []prompt.Suggest{}
@@ -473,6 +477,6 @@ func (c *Completer) getResourceNameSuggestions(ctx context.Context, namespace, c
 	case "statefulsets":
 		return getStatefulSetSuggestions(ctx, c.client, namespace)
 	default:
-		return []prompt.Suggest{}
+		return c.getGenericResourceNameSuggestions(ctx, namespace, allNamespaces, resource)
 	}
 }

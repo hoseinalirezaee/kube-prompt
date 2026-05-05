@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -34,6 +35,10 @@ func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState,
 	if err != nil {
 		return nil, err
 	}
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
 
 	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -48,6 +53,7 @@ func NewCompleter(ctx context.Context, kubeconfig string, session *SessionState,
 		session:       session,
 		namespaceList: namespaces,
 		client:        client,
+		dynamicClient: dynamicClient,
 		kubeconfig:    kubeconfig,
 		podCache:      newPodWatchCache(ctx, client),
 	}, nil
@@ -57,6 +63,7 @@ type Completer struct {
 	session        *SessionState
 	namespaceList  *corev1.NamespaceList
 	client         kubernetes.Interface
+	dynamicClient  dynamic.Interface
 	kubeconfig     string
 	podCacheMu     sync.Mutex
 	podCache       *podWatchCache
@@ -108,13 +115,14 @@ func (c *Completer) Complete(d prompt.Document) []prompt.Suggest {
 	if namespace == "" {
 		namespace = c.activeNamespace()
 	}
+	allNamespaces := checkAllNamespacesArg(d)
 	commandArgs, skipNext := excludeOptions(args)
 	if skipNext {
 		// when type 'get pod -o ', we don't want to complete pods. we want to type 'json' or other.
 		// So we need to skip argumentCompleter.
 		return []prompt.Suggest{}
 	}
-	return c.argumentsCompleter(context.TODO(), namespace, commandArgs)
+	return c.argumentsCompleterWithScope(context.TODO(), namespace, allNamespaces, commandArgs)
 }
 
 func (c *Completer) completeShellSegment(segment string) []prompt.Suggest {
@@ -144,6 +152,21 @@ func checkNamespaceArg(d prompt.Document) string {
 		}
 	}
 	return ""
+}
+
+func checkAllNamespacesArg(d prompt.Document) bool {
+	args := strings.Split(d.Text, " ")
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--all-namespaces" || arg == "-A":
+			return true
+		case strings.HasPrefix(arg, "--all-namespaces="):
+			value := strings.TrimPrefix(arg, "--all-namespaces=")
+			return value == "" || strings.EqualFold(value, "true")
+		}
+	}
+	return false
 }
 
 var sessionCommandSuggestions = []prompt.Suggest{

@@ -24,6 +24,7 @@ func resetResourceCache() {
 	limitRangeList = new(sync.Map)
 	replicaSetList = new(sync.Map)
 	statefulSetList = new(sync.Map)
+	genericResourceNameList = new(sync.Map)
 }
 
 func assertSuggestionTexts(t *testing.T, suggestions []prompt.Suggest, expected []string) {
