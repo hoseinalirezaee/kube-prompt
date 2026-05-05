@@ -9,7 +9,7 @@ This repository is a maintained divergent fork of the original
 [c-bata/kube-prompt](https://github.com/c-bata/kube-prompt). The original
 project, author attribution, and MIT license are preserved.
 
-![demo](https://github.com/c-bata/assets/raw/master/kube-prompt/kube-prompt.gif)
+![demo](./assets/kube-prompt-demo.gif)
 
 kube-prompt accepts the same commands as the kubectl, except you don't need to provide the `kubectl` prefix.
 So it doesn't require the additional cost to use this cli.
@@ -22,6 +22,18 @@ web-1144924021-2spbr        1/1     Running     4       25d
 web-1144924021-5r1fg        1/1     Running     4       25d
 web-1144924021-pqmfq        1/1     Running     4       25d
 ```
+
+## Features
+
+* kubectl-style commands without typing the `kubectl` prefix.
+* Context status line showing the active kubeconfig, namespace, and proxy.
+* Session namespace handling with `/namespace` and `--default-namespace`.
+* Managed output history with `Ctrl-S`, `/outputs`, and `/output save`.
+* Completion after shell pipes, for example `get pods | grep web`.
+* Proxy support through `--proxy` and kubeconfig `proxy-url` entries.
+* Pod owner shortcuts such as `get pods deployment/web`.
+* Generic resource name completion for discovered Kubernetes resources,
+  including CRDs.
 
 ## Installation
 
