@@ -29,6 +29,10 @@ Type "get pods deployment/web"
 Enter
 Sleep 2s
 
+Type "get secret api-credentials | kpb64decode"
+Enter
+Sleep 2s
+
 Type "get widgets alpha"
 Enter
 Sleep 2s

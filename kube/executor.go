@@ -16,6 +16,7 @@ import (
 type CommandRunner func(input string, cmd *exec.Cmd) error
 
 var kubernetesClientFactory = newKubernetesClient
+var kubePromptExecutable = os.Executable
 
 func NewExecutor(kubeconfig, proxyURL string, session *SessionState) func(string) {
 	return NewExecutorWithRunner(kubeconfig, proxyURL, session, directCommandRunner)
@@ -44,6 +45,11 @@ func execute(s, kubeconfig, proxyURL string, session *SessionState, runner Comma
 	}
 
 	rewritten, err := rewritePodOwnerShortcut(context.Background(), s, kubeconfig, proxyURL, session.Namespace())
+	if err != nil {
+		fmt.Printf("Got error: %s\n", err.Error())
+		return
+	}
+	rewritten, err = rewriteSecretDecodePipeline(rewritten)
 	if err != nil {
 		fmt.Printf("Got error: %s\n", err.Error())
 		return
@@ -195,11 +201,93 @@ func rewritePodOwnerShortcut(ctx context.Context, input, kubeconfig, proxyURL, n
 }
 
 func splitCommandBeforePipe(input string) (beforePipe, afterPipe string) {
-	pipe := strings.Index(input, "|")
-	if pipe < 0 {
+	before, after, ok := splitFirstShellPipe(input)
+	if !ok {
 		return input, ""
 	}
-	return strings.TrimSpace(input[:pipe]), input[pipe:]
+	return strings.TrimSpace(before), "|" + after
+}
+
+func rewriteSecretDecodePipeline(input string) (string, error) {
+	segments := shellPipeSegments(input)
+	if len(segments) < 2 {
+		return input, nil
+	}
+
+	decoderIndex := -1
+	for i := 1; i < len(segments); i++ {
+		fields := strings.Fields(strings.TrimSpace(segments[i]))
+		if len(fields) > 0 && fields[0] == SecretDecodeCommand {
+			if decoderIndex != -1 {
+				return "", fmt.Errorf("%s can only be used once in a pipeline", SecretDecodeCommand)
+			}
+			decoderIndex = i
+		}
+	}
+	if decoderIndex == -1 {
+		return input, nil
+	}
+	if decoderIndex != len(segments)-1 {
+		return "", fmt.Errorf("%s must be the final pipe command", SecretDecodeCommand)
+	}
+	if strings.TrimSpace(segments[decoderIndex]) != SecretDecodeCommand {
+		return "", fmt.Errorf("usage: get secret NAME | %s", SecretDecodeCommand)
+	}
+	if len(segments) != 2 {
+		return "", fmt.Errorf("%s only supports direct pipelines from get secret NAME", SecretDecodeCommand)
+	}
+
+	left := strings.TrimSpace(segments[0])
+	fields := strings.Fields(left)
+	if _, allNamespaces := commandNamespace(fields, ""); allNamespaces {
+		return "", fmt.Errorf("%s does not support --all-namespaces", SecretDecodeCommand)
+	}
+	filtered, skipNext := excludeOptions(fields)
+	if skipNext {
+		return "", fmt.Errorf("usage: get secret NAME | %s", SecretDecodeCommand)
+	}
+	if err := validateSecretDecodeGetArgs(filtered); err != nil {
+		return "", err
+	}
+
+	executable, err := kubePromptExecutable()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve kube-prompt executable: %w", err)
+	}
+	return left + " -o json | " + shellQuote(executable) + " " + SecretDecodeInternalFlag, nil
+}
+
+func validateSecretDecodeGetArgs(args []string) error {
+	if len(args) == 2 && args[0] == "get" {
+		if name, ok := secretNameFromResourcePath(args[1]); ok && name != "" {
+			return nil
+		}
+	}
+	if len(args) == 3 && args[0] == "get" && isSecretResourceToken(args[1]) && args[2] != "" {
+		return nil
+	}
+	if len(args) > 3 && args[0] == "get" && isSecretResourceToken(args[1]) {
+		return fmt.Errorf("%s only supports one named Secret", SecretDecodeCommand)
+	}
+	return fmt.Errorf("usage: get secret NAME | %s", SecretDecodeCommand)
+}
+
+func secretNameFromResourcePath(resource string) (string, bool) {
+	for _, prefix := range []string{"secret/", "secrets/"} {
+		if strings.HasPrefix(resource, prefix) {
+			return strings.TrimPrefix(resource, prefix), true
+		}
+	}
+	return "", false
+}
+
+func isSecretResourceToken(token string) bool {
+	switch token {
+	case "secret", "secrets":
+		return true
+	default:
+		return false
+	}
 }
 
 func isPodResourceToken(token string) bool {

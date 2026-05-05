@@ -38,6 +38,18 @@ type cliConfig struct {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWithInput(args, os.Stdin, stdout, stderr)
+}
+
+func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == kube.SecretDecodeInternalFlag {
+		if err := kube.DecodeSecretData(stdin, stdout); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	}
+
 	cfg, ok := parseCLI(args, stdout, stderr)
 	if !ok {
 		return 2
@@ -142,6 +154,7 @@ Examples:
   describe pod <name>
   /namespace production
   get pods | grep web
+  get secret api-credentials | kpb64decode
   /exit
 `)
 }

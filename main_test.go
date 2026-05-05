@@ -35,12 +35,34 @@ func TestRunHelp(t *testing.T) {
 				"--proxy URL",
 				"get pods",
 				"get pods | grep web",
+				"get secret api-credentials | kpb64decode",
 			} {
 				if !strings.Contains(out, expected) {
 					t.Fatalf("expected help output to contain %q, got %q", expected, out)
 				}
 			}
 		})
+	}
+}
+
+func TestRunSecretDecodeInternalModeBypassesKubeconfigRequirement(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	code := runWithInput(
+		[]string{kube.SecretDecodeInternalFlag},
+		strings.NewReader(`{"data":{"password":"czNjcjN0"}}`),
+		&stdout,
+		&stderr,
+	)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no stderr, got %q", stderr.String())
+	}
+	if got, want := stdout.String(), "password: s3cr3t\n"; got != want {
+		t.Fatalf("expected decoded output %q, got %q", want, got)
 	}
 }
 

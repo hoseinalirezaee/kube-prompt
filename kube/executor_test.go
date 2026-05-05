@@ -259,6 +259,76 @@ func TestRewritePodOwnerShortcutRejectsSelectorAndAllNamespaces(t *testing.T) {
 	}
 }
 
+func TestRewriteSecretDecodePipeline(t *testing.T) {
+	setKubePromptExecutable(t, "/tmp/kube-prompt")
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "secret resource",
+			input: "get secret api-credentials | kpb64decode",
+			want:  "get secret api-credentials -o json | '/tmp/kube-prompt' --kube-prompt-internal-secret-decode",
+		},
+		{
+			name:  "secrets resource with namespace",
+			input: "get secrets api-credentials -n apps | kpb64decode",
+			want:  "get secrets api-credentials -n apps -o json | '/tmp/kube-prompt' --kube-prompt-internal-secret-decode",
+		},
+		{
+			name:  "resource path",
+			input: "get secret/api-credentials | kpb64decode",
+			want:  "get secret/api-credentials -o json | '/tmp/kube-prompt' --kube-prompt-internal-secret-decode",
+		},
+		{
+			name:  "ordinary pipeline",
+			input: "get pods | grep web",
+			want:  "get pods | grep web",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := rewriteSecretDecodePipeline(tt.input)
+			if err != nil {
+				t.Fatalf("expected rewrite to succeed, got %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("expected rewrite %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestRewriteSecretDecodePipelineRejectsUnsupportedForms(t *testing.T) {
+	setKubePromptExecutable(t, "/tmp/kube-prompt")
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "missing name", input: "get secret | kpb64decode", want: "usage"},
+		{name: "multiple names", input: "get secret one two | kpb64decode", want: "one named Secret"},
+		{name: "all namespaces", input: "get secret api-credentials -A | kpb64decode", want: "--all-namespaces"},
+		{name: "wrong resource", input: "get pods web | kpb64decode", want: "usage"},
+		{name: "not direct", input: "get secret api-credentials | grep user | kpb64decode", want: "direct pipelines"},
+		{name: "not final", input: "get secret api-credentials | kpb64decode | cat", want: "final pipe"},
+		{name: "arguments", input: "get secret api-credentials | kpb64decode username", want: "usage"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := rewriteSecretDecodePipeline(tt.input)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected error containing %q, got %v", tt.want, err)
+			}
+		})
+	}
+}
+
 func TestRewritePodOwnerShortcutRejectsUnknownOwner(t *testing.T) {
 	setFakeKubernetesClientFactory(t, fake.NewSimpleClientset())
 
@@ -277,6 +347,18 @@ func setFakeKubernetesClientFactory(t *testing.T, client kubernetes.Interface) {
 	}
 	t.Cleanup(func() {
 		kubernetesClientFactory = previous
+	})
+}
+
+func setKubePromptExecutable(t *testing.T, path string) {
+	t.Helper()
+
+	previous := kubePromptExecutable
+	kubePromptExecutable = func() (string, error) {
+		return path, nil
+	}
+	t.Cleanup(func() {
+		kubePromptExecutable = previous
 	})
 }
 

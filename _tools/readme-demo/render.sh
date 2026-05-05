@@ -130,6 +130,17 @@ spec:
   - name: web
     image: nginx:1.27
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-credentials
+  namespace: apps
+type: Opaque
+data:
+  password: czNjcjN0LXBhc3M=
+  token: ZGVtby10b2tlbi0xMjM=
+  username: ZGVtby11c2Vy
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:

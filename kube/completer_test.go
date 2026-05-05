@@ -201,6 +201,14 @@ func TestCompleterUsesLastPipeSegment(t *testing.T) {
 	assertSuggestionTexts(t, c.Complete(*b.Document()), []string{"awk"})
 }
 
+func TestCompleterSuggestsSecretDecodePipeCommand(t *testing.T) {
+	b := prompt.NewBuffer()
+	b.InsertText("get secret api-credentials | kpb", false, true)
+	c := &Completer{}
+
+	assertSuggestionContains(t, c.Complete(*b.Document()), SecretDecodeCommand, "Secret data")
+}
+
 func TestCompleterPreservesKubectlCompletionBeforePipe(t *testing.T) {
 	resetDiscoveryCache()
 	resetResourceCache()

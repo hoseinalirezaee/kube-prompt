@@ -23,6 +23,15 @@ web-1144924021-5r1fg        1/1     Running     4       25d
 web-1144924021-pqmfq        1/1     Running     4       25d
 ```
 
+kube-prompt also provides a built-in pipe command for decoding one Secret:
+
+```
+>>> get secret api-credentials | kpb64decode
+password: s3cr3t-pass
+token: demo-token-123
+username: demo-user
+```
+
 ## Features
 
 * kubectl-style commands without typing the `kubectl` prefix.
@@ -30,6 +39,7 @@ web-1144924021-pqmfq        1/1     Running     4       25d
 * Session namespace handling with `/namespace` and `--default-namespace`.
 * Managed output history with `Ctrl-S`, `/outputs`, and `/output save`.
 * Completion after shell pipes, for example `get pods | grep web`.
+* Built-in Secret data decoding with `get secret NAME | kpb64decode`.
 * Proxy support through `--proxy` and kubeconfig `proxy-url` entries.
 * Pod owner shortcuts such as `get pods deployment/web`.
 * Generic resource name completion for discovered Kubernetes resources,

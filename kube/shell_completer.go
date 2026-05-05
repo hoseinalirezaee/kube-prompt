@@ -40,6 +40,11 @@ func (bashShellCompleter) Complete(segment string) []prompt.Suggest {
 }
 
 func textAfterLastShellPipe(text string) (string, bool) {
+	_, after, ok := splitLastShellPipe(text)
+	return after, ok
+}
+
+func splitLastShellPipe(text string) (before, after string, ok bool) {
 	lastPipe := -1
 	inSingle := false
 	inDouble := false
@@ -71,9 +76,79 @@ func textAfterLastShellPipe(text string) (string, bool) {
 	}
 
 	if lastPipe < 0 {
-		return "", false
+		return "", "", false
 	}
-	return text[lastPipe+1:], true
+	return text[:lastPipe], text[lastPipe+1:], true
+}
+
+func splitFirstShellPipe(text string) (before, after string, ok bool) {
+	inSingle := false
+	inDouble := false
+	escaped := false
+
+	for i, r := range text {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && !inSingle {
+			escaped = true
+			continue
+		}
+		switch r {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '|':
+			if !inSingle && !inDouble {
+				return text[:i], text[i+1:], true
+			}
+		}
+	}
+
+	return "", "", false
+}
+
+func shellPipeSegments(text string) []string {
+	var segments []string
+	start := 0
+	inSingle := false
+	inDouble := false
+	escaped := false
+
+	for i, r := range text {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && !inSingle {
+			escaped = true
+			continue
+		}
+		switch r {
+		case '\'':
+			if !inDouble {
+				inSingle = !inSingle
+			}
+		case '"':
+			if !inSingle {
+				inDouble = !inDouble
+			}
+		case '|':
+			if !inSingle && !inDouble {
+				segments = append(segments, text[start:i])
+				start = i + 1
+			}
+		}
+	}
+
+	segments = append(segments, text[start:])
+	return segments
 }
 
 func shellWordsForCompletion(segment string) ([]string, int) {
@@ -164,7 +239,26 @@ func bashCompletionSuggestions(segment string, words []string, cword int) []prom
 }
 
 func commandSuggestions(prefix string) []prompt.Suggest {
-	return suggestionsFromStrings(commandNames(prefix), "command")
+	suggestions := suggestionsFromStrings(commandNames(prefix), "command")
+	if strings.HasPrefix(SecretDecodeCommand, prefix) && !containsSuggestionText(suggestions, SecretDecodeCommand) {
+		suggestions = append(suggestions, prompt.Suggest{
+			Text:        SecretDecodeCommand,
+			Description: "Decode Kubernetes Secret data",
+		})
+		sort.Slice(suggestions, func(i, j int) bool {
+			return suggestions[i].Text < suggestions[j].Text
+		})
+	}
+	return suggestions
+}
+
+func containsSuggestionText(suggestions []prompt.Suggest, text string) bool {
+	for _, suggestion := range suggestions {
+		if suggestion.Text == text {
+			return true
+		}
+	}
+	return false
 }
 
 func commandNames(prefix string) []string {
