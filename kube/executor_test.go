@@ -212,6 +212,31 @@ func TestRewritePodOwnerShortcutDeployment(t *testing.T) {
 	}
 }
 
+func TestRewritePodOwnerShortcutWithLeadingNamespaceFlag(t *testing.T) {
+	setFakeKubernetesClientFactory(t, fake.NewSimpleClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "backend-api-search-elastic-es-data-0-exporter", Namespace: "infrastructure"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "search-exporter"},
+			},
+		},
+	}))
+
+	got, err := rewritePodOwnerShortcut(
+		context.Background(),
+		"-n infrastructure get pod deployment/backend-api-search-elastic-es-data-0-exporter -o yaml",
+		"/tmp/kubeconfig",
+		"",
+		"apps",
+	)
+	if err != nil {
+		t.Fatalf("expected rewrite to succeed, got %v", err)
+	}
+	if want := "-n infrastructure get pod -l app=search-exporter -o yaml"; got != want {
+		t.Fatalf("expected rewritten command %q, got %q", want, got)
+	}
+}
+
 func TestRewritePodOwnerShortcutRejectsMissingNamespace(t *testing.T) {
 	setFakeKubernetesClientFactory(t, fake.NewSimpleClientset(&appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "kwok-demo"},

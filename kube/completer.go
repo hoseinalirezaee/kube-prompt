@@ -294,12 +294,18 @@ func getCommandArgs(d prompt.Document) []string {
 }
 
 func excludeOptions(args []string) ([]string, bool) {
+	filtered, _, skipNextArg := excludeOptionsWithIndexes(args)
+	return filtered, skipNextArg
+}
+
+func excludeOptionsWithIndexes(args []string) ([]string, []int, bool) {
 	l := len(args)
 	if l == 0 {
-		return nil, false
+		return nil, nil, false
 	}
 	cmd := args[0]
 	filtered := make([]string, 0, l)
+	indexes := make([]int, 0, l)
 
 	var skipNextArg bool
 	for i := 0; i < len(args); i++ {
@@ -339,6 +345,7 @@ func excludeOptions(args []string) ([]string, bool) {
 		}
 
 		filtered = append(filtered, args[i])
+		indexes = append(indexes, i)
 	}
-	return filtered, skipNextArg
+	return filtered, indexes, skipNextArg
 }

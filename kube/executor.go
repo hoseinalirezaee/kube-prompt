@@ -146,19 +146,22 @@ func kubectlCommand(s, kubeconfig, namespace, proxyURL string) *exec.Cmd {
 func rewritePodOwnerShortcut(ctx context.Context, input, kubeconfig, proxyURL, namespace string) (string, error) {
 	beforePipe, afterPipe := splitCommandBeforePipe(input)
 	fields := strings.Fields(beforePipe)
-	if len(fields) < 3 || fields[0] != "get" || !isPodResourceToken(fields[1]) {
+	filteredArgs, filteredIndexes, _ := excludeOptionsWithIndexes(fields)
+	if len(filteredArgs) < 3 || filteredArgs[0] != "get" || !isPodResourceToken(filteredArgs[1]) {
 		return input, nil
 	}
 
 	ownerIndex := -1
-	for i := 2; i < len(fields); i++ {
-		if _, _, ok := parsePodOwnerToken(fields[i]); !ok {
+	ownerFilteredIndex := -1
+	for i := 2; i < len(filteredArgs); i++ {
+		if _, _, ok := parsePodOwnerToken(filteredArgs[i]); !ok {
 			continue
 		}
 		if ownerIndex != -1 {
 			return "", fmt.Errorf("only one pod owner shortcut is supported per command")
 		}
-		ownerIndex = i
+		ownerFilteredIndex = i
+		ownerIndex = filteredIndexes[i]
 	}
 	if ownerIndex == -1 {
 		return input, nil
@@ -166,8 +169,7 @@ func rewritePodOwnerShortcut(ctx context.Context, input, kubeconfig, proxyURL, n
 	if hasSelectorFlag(fields) {
 		return "", fmt.Errorf("pod owner shortcuts cannot be combined with --selector or -l")
 	}
-	filteredArgs, _ := excludeOptions(fields)
-	if len(filteredArgs) != 3 || filteredArgs[2] != fields[ownerIndex] {
+	if len(filteredArgs) != 3 || ownerFilteredIndex != 2 {
 		return "", fmt.Errorf("pod owner shortcuts cannot be combined with additional resource names")
 	}
 
