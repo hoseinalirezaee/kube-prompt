@@ -1345,19 +1345,149 @@ func isStreamingCommand(input string) bool {
 	if len(fields) == 0 {
 		return false
 	}
+
+	verbIndex := kubectlVerbIndex(fields)
+	verb := ""
+	if verbIndex >= 0 {
+		verb = fields[verbIndex]
+	}
+
 	for _, field := range fields {
-		switch {
-		case field == "-w" || field == "--watch" || field == "--watch=true":
-			return true
-		case strings.HasPrefix(field, "--watch=") && field != "--watch=false":
-			return true
-		case fields[0] == "logs" && (field == "-f" || field == "--follow" || field == "--follow=true"):
-			return true
-		case fields[0] == "logs" && strings.HasPrefix(field, "--follow=") && field != "--follow=false":
-			return true
+		if flag, ok := boolFlagValue(field, "--watch", "-w"); ok {
+			if flag {
+				return true
+			}
+			continue
 		}
 	}
-	return false
+	if verb != "logs" {
+		return false
+	}
+
+	follow := false
+	for _, field := range fields[verbIndex+1:] {
+		if flag, ok := boolFlagValue(field, "--follow", "-f"); ok {
+			follow = flag
+		}
+	}
+	return follow
+}
+
+func boolFlagValue(field, long, short string) (bool, bool) {
+	switch {
+	case field == long || field == short:
+		return true, true
+	case strings.HasPrefix(field, long+"="):
+		value, err := strconv.ParseBool(strings.TrimPrefix(field, long+"="))
+		return value, err == nil
+	case strings.HasPrefix(field, short+"="):
+		value, err := strconv.ParseBool(strings.TrimPrefix(field, short+"="))
+		return value, err == nil
+	default:
+		return false, false
+	}
+}
+
+func kubectlVerbIndex(fields []string) int {
+	for i := 0; i < len(fields); i++ {
+		field := fields[i]
+		if field == "--" {
+			if i+1 < len(fields) {
+				return i + 1
+			}
+			return -1
+		}
+		if !strings.HasPrefix(field, "-") {
+			return i
+		}
+		if next, ok := skipLeadingKubectlGlobalFlag(fields, i); ok {
+			i = next
+			continue
+		}
+		return -1
+	}
+	return -1
+}
+
+func skipLeadingKubectlGlobalFlag(fields []string, index int) (int, bool) {
+	field := fields[index]
+	if field == "-A" || field == "-h" {
+		return index, true
+	}
+	if field == "-n" || field == "-v" {
+		return index + 1, true
+	}
+	if strings.HasPrefix(field, "-n=") || strings.HasPrefix(field, "-v=") {
+		return index, true
+	}
+	if strings.HasPrefix(field, "-n") && len(field) > len("-n") {
+		return index, true
+	}
+
+	name, _, hasValue := strings.Cut(field, "=")
+	if _, ok := kubectlGlobalBoolFlags[name]; ok {
+		return index, true
+	}
+	if _, ok := kubectlGlobalValueFlags[name]; ok {
+		if hasValue {
+			return index, true
+		}
+		return index + 1, true
+	}
+	return index, false
+}
+
+var kubectlGlobalBoolFlags = map[string]struct{}{
+	"--add-dir-header":            {},
+	"--alsologtostderr":           {},
+	"--all-namespaces":            {},
+	"--disable-compression":       {},
+	"--help":                      {},
+	"--insecure-skip-tls-verify":  {},
+	"--logtostderr":               {},
+	"--match-server-version":      {},
+	"--one-output":                {},
+	"--show-managed-fields":       {},
+	"--skip-headers":              {},
+	"--skip-log-headers":          {},
+	"--skip_headers":              {},
+	"--skip_log_headers":          {},
+	"--use-openapi-print-columns": {},
+	"--warnings-as-errors":        {},
+}
+
+var kubectlGlobalValueFlags = map[string]struct{}{
+	"--as":                    {},
+	"--as-group":              {},
+	"--as-uid":                {},
+	"--cache-dir":             {},
+	"--certificate-authority": {},
+	"--client-certificate":    {},
+	"--client-key":            {},
+	"--cluster":               {},
+	"--context":               {},
+	"--kubeconfig":            {},
+	"--kuberc":                {},
+	"--log-backtrace-at":      {},
+	"--log-dir":               {},
+	"--log-file":              {},
+	"--log-file-max-size":     {},
+	"--log-flush-frequency":   {},
+	"--log-level":             {},
+	"--log-vmodule":           {},
+	"--namespace":             {},
+	"--password":              {},
+	"--profile":               {},
+	"--profile-output":        {},
+	"--request-timeout":       {},
+	"--server":                {},
+	"--stderrthreshold":       {},
+	"--tls-server-name":       {},
+	"--token":                 {},
+	"--user":                  {},
+	"--username":              {},
+	"--v":                     {},
+	"--vmodule":               {},
 }
 
 func usesStdinFileArg(fields []string) bool {
