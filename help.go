@@ -19,6 +19,8 @@ Ctrl shortcuts:
   Ctrl-E  Move to the end of the line
   Ctrl-F  Move forward one character
   Ctrl-B  Move backward one character
+  Ctrl-Right  Move forward one word
+  Ctrl-Left   Move backward one word
   Ctrl-P  Previous command in history
   Ctrl-N  Next command in history
   Ctrl-H  Delete the character before the cursor

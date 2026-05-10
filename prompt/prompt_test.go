@@ -43,6 +43,35 @@ func TestSplitInputAtEnterKeepsCRLFTogether(t *testing.T) {
 	}
 }
 
+func TestFeedControlArrowsMoveByWord(t *testing.T) {
+	p := newTestPrompt(
+		&scriptedParser{input: make(chan []byte, 1)},
+		discardWriter{},
+		func(string) {},
+		func(Document) []Suggest { return nil },
+	)
+	p.keyParser = NewKeyParser()
+
+	text := "get pods deployment web"
+	p.buf.InsertText(text, false, true)
+
+	shouldExit, exec := p.feed([]byte{0x1b, 0x5b, '1', ';', '5', 'D'})
+	if shouldExit || exec != nil {
+		t.Fatalf("expected movement only, shouldExit=%t exec=%#v", shouldExit, exec)
+	}
+	if got, want := p.buf.cursorPosition, len([]rune("get pods deployment ")); got != want {
+		t.Fatalf("expected Ctrl-Left to move to %d, got %d", want, got)
+	}
+
+	shouldExit, exec = p.feed([]byte{0x1b, 0x5b, '1', ';', '5', 'C'})
+	if shouldExit || exec != nil {
+		t.Fatalf("expected movement only, shouldExit=%t exec=%#v", shouldExit, exec)
+	}
+	if got, want := p.buf.cursorPosition, len([]rune(text)); got != want {
+		t.Fatalf("expected Ctrl-Right to move to %d, got %d", want, got)
+	}
+}
+
 func TestRunDoesNotBlockInputOnSlowCompleter(t *testing.T) {
 	parser := &scriptedParser{input: make(chan []byte, 10)}
 	completerStarted := make(chan struct{}, 1)

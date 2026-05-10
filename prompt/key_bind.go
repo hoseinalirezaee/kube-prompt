@@ -56,4 +56,14 @@ var commonKeyBindings = []KeyBind{
 		Key: Left,
 		Fn:  GoLeftChar,
 	},
+	// Ctrl + Right allow: Forward one word
+	{
+		Key: ControlRight,
+		Fn:  GoRightWord,
+	},
+	// Ctrl + Left allow: Backward one word
+	{
+		Key: ControlLeft,
+		Fn:  GoLeftWord,
+	},
 }

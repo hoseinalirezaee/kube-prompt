@@ -44,6 +44,35 @@ func TestKeyParser_Feed(t *testing.T) {
 	}
 }
 
+func TestKeyParser_ControlArrowSequences(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected Key
+	}{
+		{
+			name:     "control right xterm",
+			input:    []byte{0x1b, 0x5b, '1', ';', '5', 'C'},
+			expected: ControlRight,
+		},
+		{
+			name:     "control left xterm",
+			input:    []byte{0x1b, 0x5b, '1', ';', '5', 'D'},
+			expected: ControlLeft,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := NewKeyParser()
+			events := parser.Feed(test.input)
+			if len(events) != 1 || events[0].Key != test.expected {
+				t.Fatalf("expected %s, got %+v", test.expected, events)
+			}
+		})
+	}
+}
+
 func TestKeyParser_HomeEndSequences(t *testing.T) {
 	tests := []struct {
 		name     string
