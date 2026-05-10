@@ -108,11 +108,11 @@ func TestGenericResourceCommandsUseDiscovery(t *testing.T) {
 	waitForSuggestionTexts(t, func() []prompt.Suggest {
 		return c.getPodSuggestions(ctx, namespace)
 	}, []string{"web-0"})
-	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"patch", "p"}), "pods", "v1")
+	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"patch", "p"}), "pod", "v1")
 	assertSuggestionTexts(t, c.argumentsCompleter(ctx, namespace, []string{"patch", "po", "web"}), []string{"web-0"})
-	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"label", "p"}), "pods", "v1")
-	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"wait", "p"}), "pods", "v1")
-	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"set", "image", "p"}), "pods", "v1")
+	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"label", "p"}), "pod", "v1")
+	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"wait", "p"}), "pod", "v1")
+	assertSuggestionContains(t, c.argumentsCompleter(ctx, namespace, []string{"set", "image", "p"}), "pod", "v1")
 }
 
 func TestNodeAndPodSpecificCommands(t *testing.T) {

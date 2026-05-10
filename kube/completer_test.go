@@ -232,7 +232,7 @@ func TestCompleterPreservesKubectlCompletionBeforePipe(t *testing.T) {
 	c := &Completer{client: client}
 
 	fetchDiscoveredResources(context.Background(), client)
-	assertSuggestionContains(t, c.Complete(*b.Document()), "pods", "v1")
+	assertSuggestionContains(t, c.Complete(*b.Document()), "pod", "v1")
 }
 
 func TestCheckNamespaceArgSupportsKubectlForms(t *testing.T) {

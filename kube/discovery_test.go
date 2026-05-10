@@ -45,9 +45,9 @@ func TestDiscoveredResourceTypeSuggestionsIncludeCRD(t *testing.T) {
 	fetchDiscoveredResources(ctx, client)
 	suggestions := getDiscoveredResourceTypeSuggestions(ctx, client, "get")
 
-	assertSuggestionContains(t, suggestions, "widgets", "example.com/v1", "namespaced")
-	assertSuggestionContains(t, suggestions, "widget", "singular", "example.com/v1")
-	assertSuggestionContains(t, suggestions, "wdg", "short name", "widgets")
+	assertSuggestionContains(t, suggestions, "widget", "example.com/v1", "namespaced")
+	assertNoSuggestionText(t, suggestions, "widgets")
+	assertNoSuggestionText(t, suggestions, "wdg")
 }
 
 func TestDiscoveredResourceTypeSuggestionsDoNotUseRemovedStaticResources(t *testing.T) {
@@ -78,7 +78,8 @@ func TestDiscoveredResourceTypeSuggestionsDoNotUseRemovedStaticResources(t *test
 	if hasSuggestionText(suggestions, "podsecuritypolicies") {
 		t.Fatal("podsecuritypolicies should not be suggested when discovery does not return it")
 	}
-	assertSuggestionContains(t, suggestions, "pods", "v1", "namespaced")
+	assertSuggestionContains(t, suggestions, "pod", "v1", "namespaced")
+	assertNoSuggestionText(t, suggestions, "pods")
 }
 
 func TestDiscoveredResourceTypeSuggestionsFilterByCommandVerb(t *testing.T) {
@@ -109,10 +110,62 @@ func TestDiscoveredResourceTypeSuggestionsFilterByCommandVerb(t *testing.T) {
 	fetchDiscoveredResources(ctx, client)
 	suggestions := getDiscoveredResourceTypeSuggestions(ctx, client, "delete")
 
-	assertSuggestionContains(t, suggestions, "deployments", "apps/v1", "namespaced")
-	if hasSuggestionText(suggestions, "controllers") {
+	assertSuggestionContains(t, suggestions, "deployment", "apps/v1", "namespaced")
+	assertNoSuggestionText(t, suggestions, "deployments")
+	if hasSuggestionText(suggestions, "controller") {
 		t.Fatal("resources without delete should not be suggested for delete")
 	}
+}
+
+func TestDiscoveredResourceTypeSuggestionsFallbackToNameWhenSingularEmpty(t *testing.T) {
+	resetDiscoveryCache()
+	ctx := context.Background()
+	client := fake.NewSimpleClientset()
+	client.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "example.com/v1",
+			APIResources: []metav1.APIResource{
+				{
+					Name:       "widgets",
+					Namespaced: true,
+					Verbs:      metav1.Verbs{"get", "list"},
+				},
+			},
+		},
+	}
+
+	fetchDiscoveredResources(ctx, client)
+	suggestions := getDiscoveredResourceTypeSuggestions(ctx, client, "get")
+
+	assertSuggestionContains(t, suggestions, "widgets", "example.com/v1", "namespaced")
+}
+
+func TestResourceTypeCompletionMatchesContainedSingularName(t *testing.T) {
+	resetDiscoveryCache()
+	ctx := context.Background()
+	client := fake.NewSimpleClientset()
+	client.Resources = []*metav1.APIResourceList{
+		{
+			GroupVersion: "cilium.io/v2",
+			APIResources: []metav1.APIResource{
+				{
+					Name:         "ciliumnetworkpolicies",
+					SingularName: "ciliumnetworkpolicy",
+					ShortNames:   []string{"cnp"},
+					Namespaced:   true,
+					Verbs:        metav1.Verbs{"get", "list"},
+				},
+			},
+		},
+	}
+	c := &Completer{client: client}
+
+	fetchDiscoveredResources(ctx, client)
+	suggestions := c.argumentsCompleter(ctx, "default", []string{"get", "network"})
+
+	assertSuggestionContains(t, suggestions, "ciliumnetworkpolicy", "cilium.io/v2", "namespaced")
+	assertNoSuggestionText(t, suggestions, "ciliumnetworkpolicies")
+	assertNoSuggestionText(t, suggestions, "cnp")
 }
 
 func TestGetDiscoveredResourcesReturnsBeforeSlowDiscovery(t *testing.T) {
@@ -300,6 +353,14 @@ func hasSuggestionText(suggestions []prompt.Suggest, text string) bool {
 		}
 	}
 	return false
+}
+
+func assertNoSuggestionText(t *testing.T, suggestions []prompt.Suggest, text string) {
+	t.Helper()
+
+	if hasSuggestionText(suggestions, text) {
+		t.Fatalf("expected suggestion %q to be absent from %#v", text, suggestions)
+	}
 }
 
 func waitForDiscoveredResourceCount(t *testing.T, expected int) {

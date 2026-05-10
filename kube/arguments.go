@@ -361,7 +361,7 @@ func (c *Completer) argumentsCompleterWithScope(ctx context.Context, namespace s
 }
 
 func (c *Completer) completeResourceType(ctx context.Context, command, word string) []prompt.Suggest {
-	return prompt.FilterHasPrefix(
+	return prompt.FilterContains(
 		getDiscoveredResourceTypeSuggestions(ctx, c.client, command),
 		word,
 		true,

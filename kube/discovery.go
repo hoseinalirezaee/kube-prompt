@@ -103,25 +103,17 @@ func getDiscoveredResourceTypeSuggestions(ctx context.Context, client kubernetes
 		if !supportsResourceCommand(resources[i], command) {
 			continue
 		}
+		text := resources[i].SingularName
+		if text == "" {
+			text = resources[i].Name
+		}
+		if text == "" {
+			continue
+		}
 		addDiscoveredResourceSuggestion(&suggestions, seen, prompt.Suggest{
-			Text:        resources[i].Name,
+			Text:        text,
 			Description: discoveredResourceDescription(resources[i]),
 		})
-		if resources[i].SingularName != "" && resources[i].SingularName != resources[i].Name {
-			addDiscoveredResourceSuggestion(&suggestions, seen, prompt.Suggest{
-				Text:        resources[i].SingularName,
-				Description: "singular, " + discoveredResourceDescription(resources[i]),
-			})
-		}
-		for _, shortName := range resources[i].ShortNames {
-			if shortName == "" || shortName == resources[i].Name {
-				continue
-			}
-			addDiscoveredResourceSuggestion(&suggestions, seen, prompt.Suggest{
-				Text:        shortName,
-				Description: "short name for " + resources[i].Name + ", " + discoveredResourceDescription(resources[i]),
-			})
-		}
 	}
 
 	sort.Slice(suggestions, func(i, j int) bool {
