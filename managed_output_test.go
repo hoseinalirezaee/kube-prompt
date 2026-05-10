@@ -571,6 +571,9 @@ func TestRenderScrollViewStateRendersManagedCommandDropdown(t *testing.T) {
 	}
 
 	out := base.String()
+	if strings.Contains(out, "<erase-down>") {
+		t.Fatalf("did not expect full body erase while rendering dropdown, got %q", out)
+	}
 	if strings.Contains(out, "COMMAND /o") {
 		t.Fatalf("did not expect command text in status line, got %q", out)
 	}
@@ -617,6 +620,9 @@ func TestRenderLiveTailStateRendersManagedCommandAtBottom(t *testing.T) {
 	}
 
 	out := base.String()
+	if strings.Contains(out, "<erase-down>") {
+		t.Fatalf("did not expect full body erase while rendering dropdown, got %q", out)
+	}
 	if strings.Contains(out, "COMMAND /o") {
 		t.Fatalf("did not expect command text in status line, got %q", out)
 	}
@@ -630,6 +636,34 @@ func TestRenderLiveTailStateRendersManagedCommandAtBottom(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected live tail render output to contain %q, got %q", want, out)
 		}
+	}
+}
+
+func TestRenderManagedCommandDropdownClearsAllocatedRows(t *testing.T) {
+	base := &recordingPromptWriter{}
+	status := &outputModeStatus{}
+	writer := newDynamicStatusLineWriter(base, func() string {
+		return " status" + status.Suffix()
+	})
+	writer.cols = 80
+	runner := newManagedOutputRunner(writer, status)
+	defer runner.Close()
+
+	command := &managedCommandState{input: []rune("/")}
+	runner.renderManagedCommandDropdown(base, command, 4, 3)
+
+	out := base.String()
+	for _, want := range []string{
+		"<goto:4:1><erase-line>",
+		"<goto:5:1><erase-line>",
+		"<goto:6:1><erase-line>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected dropdown clear output to contain %q, got %q", want, out)
+		}
+	}
+	if strings.Contains(out, "<erase-down>") {
+		t.Fatalf("did not expect full body erase while clearing dropdown, got %q", out)
 	}
 }
 

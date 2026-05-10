@@ -163,6 +163,56 @@ func TestShouldRequestCompletionForTabWithoutSuggestions(t *testing.T) {
 	}
 }
 
+func TestCompletionRefreshPreservesSuggestionsWhilePending(t *testing.T) {
+	p := newTestPrompt(
+		&scriptedParser{input: make(chan []byte, 1)},
+		discardWriter{},
+		func(string) {},
+		func(Document) []Suggest { return nil },
+	)
+	p.keyParser = NewKeyParser()
+	p.buf.InsertText("p", false, true)
+	p.completion.SetSuggestions([]Suggest{
+		{Text: "pods"},
+		{Text: "proxy"},
+	})
+
+	before := p.currentDocumentState()
+	previous := p.currentSuggestions()
+	shouldExit, exec := p.feed([]byte("o"))
+	if shouldExit || exec != nil {
+		t.Fatalf("expected text input only, shouldExit=%t exec=%#v", shouldExit, exec)
+	}
+	if !p.shouldRequestCompletion(before) {
+		t.Fatal("expected typing to request refreshed completions")
+	}
+
+	p.prepareCompletionRefresh(previous)
+	if got, want := p.completion.GetSuggestions(), previous; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected previous suggestions to stay visible, want %#v, got %#v", want, got)
+	}
+	if p.completion.Completing() {
+		t.Fatal("expected selection preview to reset while preserving suggestions")
+	}
+}
+
+func TestCompletionRefreshHardResetKeysCloseSuggestions(t *testing.T) {
+	p := newTestPrompt(
+		&scriptedParser{input: make(chan []byte, 1)},
+		discardWriter{},
+		func(string) {},
+		func(Document) []Suggest { return nil },
+	)
+	p.completion.SetSuggestions([]Suggest{{Text: "pods"}})
+	previous := p.currentSuggestions()
+	p.buf.lastKeyStroke = Escape
+
+	p.prepareCompletionRefresh(previous)
+	if got := p.completion.GetSuggestions(); len(got) != 0 {
+		t.Fatalf("expected hard reset key to clear suggestions, got %#v", got)
+	}
+}
+
 type scriptedParser struct {
 	input chan []byte
 }

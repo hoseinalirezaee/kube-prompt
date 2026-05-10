@@ -1068,8 +1068,6 @@ func (r *managedOutputRunner) showOutputPicker() error {
 
 		w := r.statusWriter.ConsoleWriter
 		w.HideCursor()
-		w.CursorGoTo(2, 1)
-		w.EraseDown()
 		for i := 0; i < contentRows; i++ {
 			idx := top + i
 			w.CursorGoTo(i+2, 1)
@@ -1083,7 +1081,7 @@ func (r *managedOutputRunner) showOutputPicker() error {
 			}
 			w.WriteStr(truncateRunes(prefix+formatOutputSummary(summaries[idx]), r.statusWriter.cols))
 		}
-		r.renderManagedCommandDropdown(w, command, dropdownRow)
+		r.renderManagedCommandDropdown(w, command, dropdownRow, dropdownHeight)
 		r.renderManagedCommandLine(w, command, commandRow)
 		r.statusWriter.renderStatusLine()
 		w.ShowCursor()
@@ -1240,21 +1238,30 @@ func (r *managedOutputRunner) renderManagedCommandLine(w prompt.ConsoleWriter, c
 	w.CursorGoTo(row, cursorCol)
 }
 
-func (r *managedOutputRunner) renderManagedCommandDropdown(w prompt.ConsoleWriter, command *managedCommandState, startRow int) {
+func (r *managedOutputRunner) renderManagedCommandDropdown(w prompt.ConsoleWriter, command *managedCommandState, startRow, height int) {
+	if height <= 0 {
+		return
+	}
+	for i := 0; i < height; i++ {
+		w.CursorGoTo(startRow+i, 1)
+		w.EraseLine()
+	}
+
 	if command == nil || !command.Active() || len(command.Suggestions()) == 0 {
 		return
 	}
 
 	suggestions := command.VisibleSuggestions()
-	if len(suggestions) == 0 {
+	if len(suggestions) > height {
+		suggestions = suggestions[:height]
+	}
+	formatted, _ := formatManagedSuggestions(suggestions, r.statusWriter.cols-1)
+	if len(formatted) == 0 {
 		return
 	}
-
-	formatted, _ := formatManagedSuggestions(suggestions, r.statusWriter.cols-1)
 	selected := command.selected - command.verticalScroll
 	for i := 0; i < len(formatted); i++ {
 		w.CursorGoTo(startRow+i, 1)
-		w.EraseLine()
 		if i == selected {
 			w.SetColor(prompt.Black, prompt.Cyan, true)
 		} else {
@@ -1603,8 +1610,6 @@ func (r *managedOutputRunner) renderScrollViewState(spool *outputSpool, topLine 
 
 	w := r.statusWriter.ConsoleWriter
 	w.HideCursor()
-	w.CursorGoTo(2, 1)
-	w.EraseDown()
 	if contentRows > 0 {
 		lines, err := spool.ReadLines(topLine, contentRows)
 		if err != nil {
@@ -1618,7 +1623,7 @@ func (r *managedOutputRunner) renderScrollViewState(spool *outputSpool, topLine 
 			}
 		}
 	}
-	r.renderManagedCommandDropdown(w, command, dropdownRow)
+	r.renderManagedCommandDropdown(w, command, dropdownRow, dropdownHeight)
 	r.renderManagedCommandLine(w, command, commandRow)
 	r.statusWriter.renderStatusLine()
 	w.ShowCursor()
@@ -1642,8 +1647,6 @@ func (r *managedOutputRunner) renderLiveTailState(spool *outputSpool, command *m
 	start := maxInt(0, total-contentRows)
 	w := r.statusWriter.ConsoleWriter
 	w.HideCursor()
-	w.CursorGoTo(2, 1)
-	w.EraseDown()
 	lines := []string(nil)
 	if contentRows > 0 {
 		var err error
@@ -1652,17 +1655,23 @@ func (r *managedOutputRunner) renderLiveTailState(spool *outputSpool, command *m
 			return err
 		}
 	}
-	for i, line := range lines {
+	for i := 0; i < contentRows; i++ {
 		w.CursorGoTo(i+2, 1)
 		w.EraseLine()
-		w.WriteStr(truncateRunes(line, r.statusWriter.cols))
+		if i < len(lines) {
+			w.WriteStr(truncateRunes(lines[i], r.statusWriter.cols))
+		}
 	}
-	r.renderManagedCommandDropdown(w, command, dropdownRow)
+	r.renderManagedCommandDropdown(w, command, dropdownRow, dropdownHeight)
 	if command != nil && command.Active() {
 		r.renderManagedCommandLine(w, command, commandRow)
 	} else if len(lines) == 0 {
+		w.CursorGoTo(commandRow, 1)
+		w.EraseLine()
 		w.CursorGoTo(2, 1)
 	} else {
+		w.CursorGoTo(commandRow, 1)
+		w.EraseLine()
 		w.CursorGoTo(minInt(r.statusWriter.rows, 2+len(lines)), 1)
 	}
 	r.statusWriter.renderStatusLine()

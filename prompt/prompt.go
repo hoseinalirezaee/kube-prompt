@@ -83,6 +83,7 @@ func (p *Prompt) Run() {
 		select {
 		case b := <-bufCh:
 			before := p.currentDocumentState()
+			previousSuggestions := p.currentSuggestions()
 			if shouldExit, e := p.feed(b); shouldExit {
 				p.renderer.BreakLine(p.buf)
 				stopReadBufCh <- struct{}{}
@@ -112,7 +113,7 @@ func (p *Prompt) Run() {
 				go p.handleSignals(exitCh, winSizeCh, stopHandleSignalCh)
 			} else {
 				if p.shouldRequestCompletion(before) {
-					p.completion.Reset()
+					p.prepareCompletionRefresh(previousSuggestions)
 					completionState.Request(*p.buf.Document())
 				}
 				p.renderer.Render(p.buf, p.completion)
@@ -290,6 +291,7 @@ func (p *Prompt) Input() string {
 		select {
 		case b := <-bufCh:
 			before := p.currentDocumentState()
+			previousSuggestions := p.currentSuggestions()
 			if shouldExit, e := p.feed(b); shouldExit {
 				p.renderer.BreakLine(p.buf)
 				stopReadBufCh <- struct{}{}
@@ -302,7 +304,7 @@ func (p *Prompt) Input() string {
 				return e.input
 			} else {
 				if p.shouldRequestCompletion(before) {
-					p.completion.Reset()
+					p.prepareCompletionRefresh(previousSuggestions)
 					completionState.Request(*p.buf.Document())
 				}
 				p.renderer.Render(p.buf, p.completion)
@@ -327,6 +329,33 @@ func (p *Prompt) currentDocumentState() documentState {
 	return documentState{
 		text:           doc.Text,
 		cursorPosition: doc.cursorPosition,
+	}
+}
+
+func (p *Prompt) currentSuggestions() []Suggest {
+	suggestions := p.completion.GetSuggestions()
+	if len(suggestions) == 0 {
+		return nil
+	}
+	return append([]Suggest(nil), suggestions...)
+}
+
+func (p *Prompt) prepareCompletionRefresh(previousSuggestions []Suggest) {
+	if len(previousSuggestions) == 0 || p.shouldResetCompletionOnRefresh() {
+		p.completion.Reset()
+		return
+	}
+	p.completion.tmp = previousSuggestions
+	p.completion.selected = -1
+	p.completion.verticalScroll = 0
+}
+
+func (p *Prompt) shouldResetCompletionOnRefresh() bool {
+	switch p.buf.lastKeyStroke {
+	case Enter, ControlJ, ControlM, ControlC, Escape, Up, ControlP, Down, ControlN:
+		return true
+	default:
+		return false
 	}
 }
 
