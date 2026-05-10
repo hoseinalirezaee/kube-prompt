@@ -240,23 +240,31 @@ var (
 )
 
 func fetchDeployments(ctx context.Context, client kubernetes.Interface, namespace string) {
+	fetchDeploymentsInto(ctx, client, namespace, deploymentList, lastFetchedAt, fetchInFlight)
+}
+
+func fetchDeploymentsInto(ctx context.Context, client kubernetes.Interface, namespace string, cache, fetchTimes, inFlight *sync.Map) {
 	key := "deployment_" + namespace
-	fetch, ok := beginFetch(key)
+	fetch, ok := beginFetchFrom(fetchTimes, inFlight, key)
 	if !ok {
 		return
 	}
 	defer fetch.Done()
 
 	l, _ := client.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
-	deploymentList.Store(namespace, l)
+	cache.Store(namespace, l)
 	return
 }
 
 func getDeploymentSuggestions(ctx context.Context, client kubernetes.Interface, namespace string) []prompt.Suggest {
-	if shouldFetch("deployment_" + namespace) {
-		go fetchDeployments(ctx, client, namespace)
+	key := "deployment_" + namespace
+	cache := deploymentList
+	fetchTimes := lastFetchedAt
+	inFlight := fetchInFlight
+	if shouldFetchFrom(fetchTimes, key) {
+		go fetchDeploymentsInto(ctx, client, namespace, cache, fetchTimes, inFlight)
 	}
-	x, ok := deploymentList.Load(namespace)
+	x, ok := cache.Load(namespace)
 	if !ok {
 		return []prompt.Suggest{}
 	}
