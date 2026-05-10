@@ -84,3 +84,57 @@ func TestCustomSequence(t *testing.T) {
 		t.Errorf("Expected NoMatch for 'ggg', got %v", result)
 	}
 }
+
+func TestHomeEndSequences(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected Key
+	}{
+		{
+			name:     "home csi",
+			input:    []byte{0x1b, 0x5b, 0x48},
+			expected: Home,
+		},
+		{
+			name:     "home application cursor",
+			input:    []byte{0x1b, 0x4f, 0x48},
+			expected: Home,
+		},
+		{
+			name:     "end csi",
+			input:    []byte{0x1b, 0x5b, 0x46},
+			expected: End,
+		},
+		{
+			name:     "end application cursor",
+			input:    []byte{0x1b, 0x4f, 0x46},
+			expected: End,
+		},
+		{
+			name:     "end tilde 4",
+			input:    []byte{0x1b, 0x5b, 0x34, 0x7e},
+			expected: End,
+		},
+		{
+			name:     "end tilde 8",
+			input:    []byte{0x1b, 0x5b, 0x38, 0x7e},
+			expected: End,
+		},
+	}
+
+	matcher := NewSequenceMatcher()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, key := matcher.MatchSequence(test.input)
+			if result != Exact || key == nil || *key != test.expected {
+				t.Fatalf("expected exact %s, got result=%v key=%v", test.expected, result, key)
+			}
+
+			longest := matcher.FindLongestMatch(test.input)
+			if longest == nil || longest.Key != test.expected || longest.ConsumedBytes != len(test.input) {
+				t.Fatalf("expected longest match %s consuming %d bytes, got %+v", test.expected, len(test.input), longest)
+			}
+		})
+	}
+}

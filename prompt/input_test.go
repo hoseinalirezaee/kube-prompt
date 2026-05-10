@@ -20,6 +20,21 @@ func TestPosixParserGetKey(t *testing.T) {
 			input:    []byte{'a'},
 			expected: NotDefined,
 		},
+		{
+			name:     "home application cursor",
+			input:    []byte{0x1b, 0x4f, 0x48},
+			expected: Home,
+		},
+		{
+			name:     "end csi",
+			input:    []byte{0x1b, 0x5b, 0x46},
+			expected: End,
+		},
+		{
+			name:     "end application cursor",
+			input:    []byte{0x1b, 0x4f, 0x46},
+			expected: End,
+		},
 	}
 
 	for _, s := range scenarioTable {

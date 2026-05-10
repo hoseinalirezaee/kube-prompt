@@ -43,3 +43,52 @@ func TestKeyParser_Feed(t *testing.T) {
 		t.Errorf("Expected F24 for 'gg', got %+v", events)
 	}
 }
+
+func TestKeyParser_HomeEndSequences(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected Key
+	}{
+		{
+			name:     "home csi",
+			input:    []byte{0x1b, 0x5b, 0x48},
+			expected: Home,
+		},
+		{
+			name:     "home application cursor",
+			input:    []byte{0x1b, 0x4f, 0x48},
+			expected: Home,
+		},
+		{
+			name:     "end csi",
+			input:    []byte{0x1b, 0x5b, 0x46},
+			expected: End,
+		},
+		{
+			name:     "end application cursor",
+			input:    []byte{0x1b, 0x4f, 0x46},
+			expected: End,
+		},
+		{
+			name:     "end tilde 4",
+			input:    []byte{0x1b, 0x5b, 0x34, 0x7e},
+			expected: End,
+		},
+		{
+			name:     "end tilde 8",
+			input:    []byte{0x1b, 0x5b, 0x38, 0x7e},
+			expected: End,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := NewKeyParser()
+			events := parser.Feed(test.input)
+			if len(events) != 1 || events[0].Key != test.expected {
+				t.Fatalf("expected %s, got %+v", test.expected, events)
+			}
+		})
+	}
+}

@@ -155,8 +155,10 @@ func (sm *SequenceMatcher) buildStandardSequences() {
 	// Home and End keys (multiple variants)
 	sm.Insert([]byte{0x1b, 0x5b, 0x48}, Home)
 	sm.Insert([]byte{0x1b, 0x30, 0x48}, Home)
+	sm.Insert([]byte{0x1b, 0x4f, 0x48}, Home)
 	sm.Insert([]byte{0x1b, 0x5b, 0x46}, End)
 	sm.Insert([]byte{0x1b, 0x30, 0x46}, End)
+	sm.Insert([]byte{0x1b, 0x4f, 0x46}, End)
 	sm.Insert([]byte{0x1b, 0x5b, 0x31, 0x7e}, Home)
 	sm.Insert([]byte{0x1b, 0x5b, 0x34, 0x7e}, End)
 	sm.Insert([]byte{0x1b, 0x5b, 0x37, 0x7e}, Home)
@@ -251,5 +253,4 @@ func (sm *SequenceMatcher) buildStandardSequences() {
 
 	// Ignore sequences (terminal-specific sequences that should be ignored)
 	sm.Insert([]byte{0x1b, 0x5b, 0x45}, Ignore) // Xterm
-	sm.Insert([]byte{0x1b, 0x5b, 0x46}, Ignore) // Linux console
 }
